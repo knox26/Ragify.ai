@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+@theme {
+  --color-blue-600: #2563eb;
+  --color-cyan-400: #22d3ee;
+}
+
+@layer base {
+  :root {
+    /* Light mode — bold, modern, distinct surfaces */
+    --bg-primary: #f8f8fa;       /* Cool off-white — distinct from cards */
+    --bg-card: #e8e8eb;       /* Pure white — cards pop from page */
+    --bg-section: #f0f0f3;       /* Slightly deeper alt background */
+    --border-color: #e4e4e7; 
+    --border-color-productShowCase:#d4d4d8;   /* zinc-200 — clean, light borders */
+    --border-subtle: #eeeeef;    /* Near-invisible inner dividers */
+    --text-primary: #18181b;     /* zinc-900 — rich but not harsh black */
+    --text-secondary: #71717a;   /* zinc-500 — clear secondary hierarchy */
+    --accent: #7c3aed;           /* violet-600 — distinctive, modern personality */
+    --accent-soft: #f5f3ff;      /* violet-50 — subtle icon backgrounds */
+    --card-shadow: 0 0 0 1px rgba(0,0,0,0.03), 0 2px 4px rgba(0,0,0,0.04);
+    --card-hover-shadow: 0 0 0 1px rgba(0,0,0,0.03), 0 12px 24px -4px rgba(0,0,0,0.08);
+  }
+
+  .dark {
+    --bg-primary: #09090b;       /* zinc-950 */
+    --bg-card: #18181b;          /* zinc-900 */
+    --bg-section: #111113;       /* slightly lighter than zinc-950 */
+    --border-color: #27272a;     /* zinc-800 */
+    --border-color-productShowCase:#27272a; 
+    --border-subtle: #3f3f46;    /* zinc-700 */
+    --text-primary: #f8fafc;     /* slate-50 */
+    --text-secondary: #94a3b8;   /* slate-400 */
+    --accent: #22d3ee;           /* cyan-400 */
+    --accent-soft: #083344;      /* dark cyan tint */
+    --card-shadow: 0 1px 3px 0 rgba(0,0,0,0.4), 0 4px 12px 0 rgba(0,0,0,0.3);
+    --card-hover-shadow: 0 4px 20px 0 rgba(34,211,238,0.15), 0 1px 4px 0 rgba(0,0,0,0.4);
+  }
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── Text hierarchy ──────────────────────────── */
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+/* ── Glassmorphism ───────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.dark .glass {
+  background: rgba(18, 18, 20, 0.82);
+  border: 1px solid rgba(39, 39, 42, 0.7);
+}
+
+/* ── Cards ───────────────────────────────────── */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--card-shadow);
+  border-radius: 1rem;
+}
+
+.card:hover {
+  box-shadow: var(--card-hover-shadow);
+}
+
+/* ── Glow effects ────────────────────────────── */
+.glow {
+  box-shadow: 
+    0 0 0 1px rgba(124, 58, 237, 0.15),
+    0 0 40px rgba(124, 58, 237, 0.18),
+    0 8px 32px rgba(124, 58, 237, 0.12),
+    0 2px 8px rgba(124, 58, 237, 0.08);
+}
+.dark .glow {
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.12), 0 0 0 1px rgba(39,39,42,0.8);
+}
+
+
+/* ── Gradient text ───────────────────────────── */
+.gradient-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+}
+
+.dark .gradient-text {
+  background-image: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
+}
+
+/* ── Section alternation ─────────────────────── */
+.section-alt {
+  background-color: var(--bg-section);
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ── Gradient mesh ───────────────────────────── */
+.gradient-mesh {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.09) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 80%, rgba(139, 92, 246, 0.04) 0%, transparent 35%);
+}
+
+.dark .gradient-mesh {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(34, 211, 238, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(129, 140, 248, 0.08) 0%, transparent 40%);
+}
+
+/* ── Feature icon bg ─────────────────────────── */
+.icon-bg {
+  background-color: var(--accent-soft);
+}
+
+.dark .icon-bg {
+  background-color: var(--accent-soft);
+}
+
+/* ── Scrollbar ───────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
