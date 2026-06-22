@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DocumentStatus {
+  INITIATED
+  UPLOAD_COMPLETED
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum DocumentFailureReason {
+  PASSWORD_PROTECTED
+  CORRUPTED_FILE
+  EMPTY_DOCUMENT
+  OCR_REQUIRED
+  EMBEDDING_FAILED
+  PROCESSING_FAILED
+}
+
+// prisma/schema.prisma
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relational Arrays
+  refreshTokens RefreshToken[]
+  documents     Document[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Document {
+  id       String  @id @default(uuid())
+  fileName String
+  fileSize BigInt
+  mimeType String
+  r2Key    String  @unique
+  uploadId String?
+
+  status DocumentStatus @default(INITIATED)
+
+  failureReason DocumentFailureReason?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
