@@ -6,8 +6,9 @@ datasource db {
   provider = "postgresql"
 }
 
-enum DocumentStatus {
-  INITIATED
+enum UploadStatus {
+  PENDING_UPLOAD
+  UPLOAD_INITIALIZED
   UPLOAD_COMPLETED
   QUEUED
   PROCESSING
@@ -59,9 +60,10 @@ model Document {
   r2Key    String  @unique
   uploadId String?
 
-  status DocumentStatus @default(INITIATED)
+  status UploadStatus @default(UPLOAD_INITIALIZED)
 
   failureReason DocumentFailureReason?
+  errorMessage  String?                @db.Text
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
