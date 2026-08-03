@@ -19,3 +19,17 @@ export const documentInitSchema = z.object({
 
   mimeType: z.enum(ALLOWED_MIME_TYPES),
 });
+
+
+export const completeUploadSchema = z.object({
+  documentId: z.uuid(),
+
+  chunks: z
+    .array(
+      z.object({
+        chunkNumber: z.number().int().positive(),
+        etag: z.string().min(1),
+      }),
+    )
+    .min(1, "At least one uploaded chunk is required"),
+});

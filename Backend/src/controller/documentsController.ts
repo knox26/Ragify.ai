@@ -1,6 +1,9 @@
 import { Context } from "hono";
 import prisma from "../db/dbConfig";
-import { documentInitSchema } from "../validators/documentValidators";
+import {
+  documentInitSchema,
+  completeUploadSchema,
+} from "../validators/documentValidators";
 import { calculateMultipartInfo } from "../utils/calculateChunks";
 import { generateR2Key } from "../utils/r2Key";
 
@@ -8,6 +11,7 @@ import {
   createMultipartUpload,
   generatePresignedUrls,
   abortMultipartUpload,
+  completeMultipartUpload,
 } from "../services/r2Service";
 
 export const initUploadController = async (c: Context) => {
@@ -23,7 +27,7 @@ export const initUploadController = async (c: Context) => {
           message: "Invalid request body",
           errors: result.error.flatten(),
         },
-        400
+        400,
       );
     }
 
@@ -31,11 +35,11 @@ export const initUploadController = async (c: Context) => {
 
     const { fileName, fileSize, mimeType } = result.data;
 
-    const { chunkSize, totalParts } = calculateMultipartInfo(fileSize);
+    const { chunkSize, totalChunks } = calculateMultipartInfo(fileSize);
 
     const documentId = crypto.randomUUID();
 
-    const r2Key = generateR2Key(userId,documentId);
+    const r2Key = generateR2Key(userId, documentId);
 
     // Create document row first
     await prisma.document.create({
@@ -54,7 +58,7 @@ export const initUploadController = async (c: Context) => {
 
     try {
       // Create multipart upload on R2
-      uploadId = await createMultipartUpload({r2Key,mimeType,});
+      uploadId = await createMultipartUpload({ r2Key, mimeType });
 
       // Save uploadId
       await prisma.document.update({
@@ -67,33 +71,26 @@ export const initUploadController = async (c: Context) => {
       });
 
       // Generate presigned URLs
-      const presignedUrls =
-        await generatePresignedUrls({
-          r2Key,
-          uploadId,
-          totalParts,
-        });
+      const presignedUrls = await generatePresignedUrls({
+        r2Key,
+        uploadId,
+        totalChunks,
+      });
 
       return c.json(
         {
           success: true,
-          message:
-            "Document initialized successfully",
+          message: "Document initialized successfully",
           data: {
             documentId,
-            uploadId,
             chunkSize,
-            totalParts,
             presignedUrls,
           },
         },
-        200
+        200,
       );
     } catch (error) {
-      console.error(
-        "Failed to initialize multipart upload:",
-        error
-      );
+      console.error("Failed to initialize multipart upload:", error);
 
       // Cleanup multipart upload if it exists
       if (uploadId) {
@@ -103,10 +100,7 @@ export const initUploadController = async (c: Context) => {
             uploadId,
           });
         } catch (abortError) {
-          console.error(
-            "Failed to abort multipart upload:",
-            abortError
-          );
+          console.error("Failed to abort multipart upload:", abortError);
         }
       }
 
@@ -127,17 +121,187 @@ export const initUploadController = async (c: Context) => {
       throw error;
     }
   } catch (error) {
-    console.error(
-      "Upload initialization failed:",
-      error
-    );
+    console.error("Upload initialization failed:", error);
 
     return c.json(
       {
         success: false,
         message: "Internal Server Error",
       },
-      500
+      500,
+    );
+  }
+};
+
+export const completeUploadController = async (c: Context) => {
+  try {
+    const body = await c.req.json();
+
+    const result = completeUploadSchema.safeParse(body);
+
+    if (!result.success) {
+      return c.json(
+        {
+          success: false,
+          message: "Invalid request body",
+          errors: result.error.flatten(),
+        },
+        400,
+      );
+    }
+
+    const { documentId, chunks } = result.data;
+
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+    });
+
+    if (!document) {
+      return c.json(
+        {
+          success: false,
+          message: "Document not found",
+        },
+        404,
+      );
+    }
+
+    if (document.userId !== c.get("userId")) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        403,
+      );
+    }
+
+    if (document.status !== "PENDING_UPLOAD") {
+      return c.json(
+        {
+          success: false,
+          message: "Document is not in PENDING_UPLOAD state",
+        },
+        400,
+      );
+    }
+
+    if (!document.uploadId) {
+      return c.json(
+        { success: false, message: "Upload session not found" },
+        400,
+      );
+    }
+
+    try {
+      const completeUploadResponse = await completeMultipartUpload({
+        r2Key: document.r2Key,
+        uploadId: document.uploadId,
+        parts: chunks.map(({ chunkNumber, etag }) => ({
+          partNumber: chunkNumber,
+          etag,
+        })),
+      });
+
+      // if complete upload fails, then abort the upload
+
+      if (completeUploadResponse.$metadata.httpStatusCode !== 200) {
+        throw new Error("Failed to complete multipart upload");
+      }
+    } catch (error) {
+      try {
+        await abortMultipartUpload({
+          r2Key: document.r2Key,
+          uploadId: document.uploadId,
+        });
+      } catch (abortError) {
+        console.error(abortError);
+      }
+
+      await prisma.document.update({
+        where: { id: documentId },
+        data: {
+          status: "FAILED",
+          errorMessage:
+            error instanceof Error ? error.message : "Upload failed",
+        },
+      });
+
+      throw error;
+    }
+
+    //if complete upload successfull, then update the document status to UPLOADED
+
+    const updatedDocument = await prisma.document.update({
+      where: { id: documentId },
+      data: {
+        status: "UPLOAD_COMPLETED",
+      },
+    });
+
+    return c.json(
+      {
+        success: true,
+        message: "Upload completed successfully",
+        data: {
+          documentId: updatedDocument.id,
+          status: updatedDocument.status,
+        },
+      },
+      200,
+    );
+  } catch (error) {
+    console.error("Failed to complete upload:", error);
+
+    return c.json(
+      {
+        success: false,
+        message: "Internal Server Error",
+      },
+      500,
+    );
+  }
+};
+
+export const getDocumentsController = async (c: Context) => {
+  try {
+    const userId = c.get("userId");
+
+    const documents = await prisma.document.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+        fileName: true,
+        fileSize: true,
+        mimeType: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    const formattedDocuments = documents.map((doc) => ({
+      ...doc,
+      fileSize: Number(doc.fileSize),
+    }));
+
+    return c.json({
+      success: true,
+      data: formattedDocuments,
+    });
+  } catch (error) {
+    console.error("Failed to fetch documents:", error);
+
+    return c.json(
+      {
+        success: false,
+        message: "Internal Server Error",
+      },
+      500,
     );
   }
 };
