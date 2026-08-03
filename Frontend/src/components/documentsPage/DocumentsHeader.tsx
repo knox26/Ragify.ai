@@ -2,7 +2,11 @@ import { UploadButton } from "./UploadButton";
 import { UploadModal } from "./UploadModal";
 import { useState } from "react";
 
-export function DocumentsHeader() {
+type DocumentsHeaderProps = {
+  onUploadSuccess: () => void;
+};
+
+export function DocumentsHeader({ onUploadSuccess }: DocumentsHeaderProps) {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   return (
     <>
@@ -17,7 +21,11 @@ export function DocumentsHeader() {
 
         <UploadButton onClick={() => setIsUploadOpen(true)} />
       </div>
-      <UploadModal open={isUploadOpen} onClose={() => setIsUploadOpen(false)} />
+      <UploadModal
+        open={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        onUploadSuccess={onUploadSuccess}
+      />
     </>
   );
 }

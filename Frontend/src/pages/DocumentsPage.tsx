@@ -1,49 +1,51 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import { DocumentsHeader } from "../components/documentsPage/DocumentsHeader";
 import { DocumentsSearch } from "../components/documentsPage/DocumentsSearch";
 import { DocumentsGrid } from "../components/documentsPage/DocumentsGrid";
-
-const mockDocuments = [
-  {
-    id: "1",
-    name: "React Handbook.pdf",
-    status: "READY" as const,
-    uploadedAt: "2 days ago",
-  },
-  {
-    id: "2",
-    name: "AWS Architecture Guide.pdf",
-    status: "PROCESSING" as const,
-    uploadedAt: "15 minutes ago",
-  },
-  {
-    id: "3",
-    name: "Research Paper.pdf",
-    status: "FAILED" as const,
-    uploadedAt: "1 hour ago",
-  },
-  {
-    id: "4",
-    name: "Prisma Guide.pdf",
-    status: "READY" as const,
-    uploadedAt: "4 days ago",
-  },
-];
+import { api, type Document } from "../lib/api";
 
 export default function DocumentsPage() {
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchDocuments = async () => {
+    try {
+      setIsLoading(true);
+
+      const response = await api.getDocuments();
+
+      setDocuments(response.data ?? []);
+    } catch (error) {
+      console.error("Failed to fetch documents:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
 
   const filteredDocuments = useMemo(() => {
-    return mockDocuments.filter((document) =>
-      document.name.toLowerCase().includes(search.toLowerCase()),
+    return documents.filter((document) =>
+      document.fileName.toLowerCase().includes(search.toLowerCase()),
     );
-  }, [search]);
+  }, [documents, search]);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-8">
+        <div className="max-w-7xl mx-auto">Loading documents...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        <DocumentsHeader />
+        <DocumentsHeader onUploadSuccess={fetchDocuments} />
 
         <DocumentsSearch value={search} onChange={setSearch} />
 

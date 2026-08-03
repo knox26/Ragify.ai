@@ -9,4 +9,7 @@ export const API_ENDPOINTS = {
   REFRESH_TOKEN: "/api/auth/refreshtoken",
   DOCUMENTS: "/api/documents",
   DOCUMENTS_INIT_UPLOAD: "/api/documents/init-upload",
+  DOCUMENTS_COMPLETE_UPLOAD: "/api/documents/complete-upload",
+  DOCUMENTS_ABORT_UPLOAD: "/api/documents/abort-upload",
+  DOCUMENTS_GET_DOCUMENTS: "/api/documents/get-documents",
 } as const;

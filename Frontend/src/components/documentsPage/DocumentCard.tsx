@@ -1,14 +1,14 @@
 import { FileText, Trash2 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
+import type { Document } from "../../lib/api";
 
-type DocumentCardProps = {
-  id: string;
-  name: string;
-  status: "READY" | "PROCESSING" | "FAILED";
-  uploadedAt: string;
-};
+export function DocumentCard({ fileName, status, createdAt }: Document) {
+  const formattedDate = new Date(createdAt).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 
-export function DocumentCard({ name, status, uploadedAt }: DocumentCardProps) {
   return (
     <div
       className="
@@ -40,14 +40,15 @@ export function DocumentCard({ name, status, uploadedAt }: DocumentCardProps) {
             truncate
             flex-1
           "
+          title={fileName}
         >
-          {name}
+          {fileName}
         </h3>
       </div>
 
       <StatusBadge status={status} />
 
-      <p className="text-sm text-secondary">Uploaded {uploadedAt}</p>
+      <p className="text-sm text-secondary">Uploaded {formattedDate}</p>
 
       <button
         className="

@@ -1,17 +1,25 @@
+import type { DocumentStatus } from "../../lib/api";
+
 type StatusBadgeProps = {
-  status: "READY" | "PROCESSING" | "FAILED";
+  status: DocumentStatus;
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const styles = {
-    READY: "bg-emerald-500/10 text-emerald-500",
+  const styles: Record<DocumentStatus, string> = {
+    PENDING_UPLOAD: "bg-yellow-500/10 text-yellow-500",
+    UPLOAD_COMPLETED: "bg-blue-500/10 text-blue-500",
+    QUEUED: "bg-purple-500/10 text-purple-500",
     PROCESSING: "bg-yellow-500/10 text-yellow-500",
+    COMPLETED: "bg-emerald-500/10 text-emerald-500",
     FAILED: "bg-red-500/10 text-red-500",
   };
 
-  const labels = {
-    READY: "Ready",
+  const labels: Record<DocumentStatus, string> = {
+    PENDING_UPLOAD: "Pending Upload",
+    UPLOAD_COMPLETED: "Uploaded",
+    QUEUED: "Queued",
     PROCESSING: "Processing",
+    COMPLETED: "Ready",
     FAILED: "Failed",
   };
 
@@ -26,10 +34,10 @@ export function StatusBadge({ status }: StatusBadgeProps) {
         py-1
         text-sm
         font-medium
-        ${styles[status]}
+        ${styles[status] ?? "bg-gray-500/10 text-gray-500"}
       `}
     >
-      ● {labels[status]}
+      ● {labels[status] ?? status}
     </span>
   );
 }

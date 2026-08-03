@@ -1,11 +1,5 @@
 import { DocumentCard } from "./DocumentCard";
-
-type Document = {
-  id: string;
-  name: string;
-  status: "READY" | "PROCESSING" | "FAILED";
-  uploadedAt: string;
-};
+import type { Document } from "../../lib/api";
 
 type DocumentsGridProps = {
   documents: Document[];

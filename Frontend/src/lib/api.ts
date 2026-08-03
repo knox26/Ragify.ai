@@ -16,15 +16,20 @@ export interface ApiResponse<T = unknown> {
 }
 
 export type DocumentStatus =
+  | "PENDING_UPLOAD"
+  | "UPLOAD_COMPLETED"
+  | "QUEUED"
   | "PROCESSING"
-  | "READY"
+  | "COMPLETED"
   | "FAILED";
 
 export interface Document {
   id: string;
-  name: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
   status: DocumentStatus;
-  uploadedAt: string;
+  createdAt: string;
 }
 
 export interface InitUploadRequest {
@@ -34,27 +39,24 @@ export interface InitUploadRequest {
 }
 
 export interface PresignedPart {
-  partNumber: number;
+  chunkNumber: number;
   url: string;
 }
 
 export interface InitUploadResponse {
   documentId: string;
-  uploadId: string;
-  key: string;
-  partSize: number;
-  parts: PresignedPart[];
+  chunkSize: number;
+  presignedUrls: PresignedPart[];
 }
 
-export interface UploadedPart {
-  partNumber: number;
+export interface UploadedChunk {
+  chunkNumber: number;
   etag: string;
 }
 
 export interface CompleteUploadRequest {
   documentId: string;
-  uploadId: string;
-  parts: UploadedPart[];
+  chunks: UploadedChunk[];
 }
 
 export interface AbortUploadRequest {
@@ -105,7 +107,7 @@ async function attemptTokenRefresh(): Promise<boolean> {
         {},
         {
           withCredentials: true,
-        }
+        },
       );
       const ok = res.status >= 200 && res.status < 300;
       onRefreshed(ok);
@@ -202,6 +204,22 @@ export const api = {
       {
         method: "POST",
         data,
+      },
+    );
+  },
+
+  completeUpload(data: CompleteUploadRequest) {
+    return apiRequest<ApiResponse>(API_ENDPOINTS.DOCUMENTS_COMPLETE_UPLOAD, {
+      method: "POST",
+      data,
+    });
+  },
+
+  getDocuments() {
+    return apiRequest<ApiResponse<Document[]>>(
+      API_ENDPOINTS.DOCUMENTS_GET_DOCUMENTS,
+      {
+        method: "GET",
       },
     );
   },

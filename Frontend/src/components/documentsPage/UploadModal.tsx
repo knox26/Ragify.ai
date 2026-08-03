@@ -1,13 +1,20 @@
 import { X, Upload, FileText } from "lucide-react";
 import { useState } from "react";
-import { uploadDocument } from "../../services/uploadDocument";
+import { api } from "../../lib/api";
+import { createUploadChunks } from "../../utils/createUploadChunks";
+import { uploadDocumentChunks } from "../../services/uploadDocumentChunks";
 
 type UploadModalProps = {
   open: boolean;
   onClose: () => void;
+  onUploadSuccess?: () => void;
 };
 
-export function UploadModal({ open, onClose }: UploadModalProps) {
+export function UploadModal({
+  open,
+  onClose,
+  onUploadSuccess,
+}: UploadModalProps) {
   const [isUploading, setIsUploading] = useState(false);
 
   if (!open) return null;
@@ -20,9 +27,42 @@ export function UploadModal({ open, onClose }: UploadModalProps) {
     try {
       setIsUploading(true);
 
-      const uploadInfo = await uploadDocument(selectedFile);
+      const response = await api.initializeUpload({
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+        mimeType: selectedFile.type,
+      });
 
-      console.log(uploadInfo);
+      const uploadInfo = response.data;
+
+      // remove logs later
+      console.log("Upload info: ", uploadInfo);
+
+      const fileChunks = createUploadChunks({
+        file: selectedFile,
+        chunkSize: uploadInfo.chunkSize,
+        presignedUrls: uploadInfo.presignedUrls,
+      });
+
+      // remove logs later
+      console.log("File chunks: ", fileChunks);
+
+      const uploadResult = await uploadDocumentChunks(fileChunks);
+
+      // remove logs later
+      console.log("Upload result: ", uploadResult);
+
+      if (uploadResult.failedChunks.length === 0) {
+        const result = await api.completeUpload({
+          documentId: uploadInfo.documentId,
+          chunks: uploadResult.uploadedChunks,
+        });
+        console.log("Upload completed successfully", result);
+        onClose();
+        onUploadSuccess?.();
+      } else {
+        console.error("Failed chunks: ", uploadResult.failedChunks);
+      }
     } catch (error) {
       console.error(error);
     } finally {
