@@ -49,28 +49,28 @@ export async function createMultipartUpload({
 export interface GeneratePresignedUrlsParams {
   r2Key: string;
   uploadId: string;
-  totalParts: number;
+  totalChunks: number;
 }
 
 export interface PresignedPart {
-  partNumber: number;
+  chunkNumber: number;
   url: string;
 }
 
 export async function generatePresignedUrls({
   r2Key,
   uploadId,
-  totalParts,
+  totalChunks,
 }: GeneratePresignedUrlsParams): Promise<PresignedPart[]> {
   return Promise.all(
-    Array.from({ length: totalParts }, async (_, index) => {
-      const partNumber = index + 1;
+    Array.from({ length: totalChunks }, async (_, index) => {
+      const chunkNumber = index + 1;
 
       const command = new UploadPartCommand({
         Bucket: BUCKET_NAME,
         Key: r2Key,
         UploadId: uploadId,
-        PartNumber: partNumber,
+        PartNumber: chunkNumber,
       });
 
       const url = await getSignedUrl(
@@ -82,7 +82,7 @@ export async function generatePresignedUrls({
       );
 
       return {
-        partNumber,
+        chunkNumber,
         url,
       };
     })
@@ -149,4 +149,7 @@ export async function completeMultipartUpload({
 
   return r2Client.send(command);
 }
+
+
+// Backend → src/services/r2Service.ts
 
