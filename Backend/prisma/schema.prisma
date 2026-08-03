@@ -8,7 +8,6 @@ datasource db {
 
 enum UploadStatus {
   PENDING_UPLOAD
-  UPLOAD_INITIALIZED
   UPLOAD_COMPLETED
   QUEUED
   PROCESSING
@@ -60,7 +59,7 @@ model Document {
   r2Key    String  @unique
   uploadId String?
 
-  status UploadStatus @default(UPLOAD_INITIALIZED)
+  status UploadStatus @default(PENDING_UPLOAD)
 
   failureReason DocumentFailureReason?
   errorMessage  String?                @db.Text
