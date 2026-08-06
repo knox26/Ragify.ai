@@ -6,6 +6,7 @@ const ALLOWED_MIME_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
+  "text/markdown",
 ] as const;
 
 export const documentInitSchema = z.object({
@@ -19,7 +20,6 @@ export const documentInitSchema = z.object({
 
   mimeType: z.enum(ALLOWED_MIME_TYPES),
 });
-
 
 export const completeUploadSchema = z.object({
   documentId: z.uuid(),
