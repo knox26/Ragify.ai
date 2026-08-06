@@ -14,6 +14,10 @@ import {
   completeMultipartUpload,
 } from "../services/r2Service";
 
+import { JOB_NAMES } from "../queues/queueConstants";
+
+import { documentProcessorQueue } from "../queues/documentQueue";
+
 export const initUploadController = async (c: Context) => {
   try {
     const body = await c.req.json();
@@ -230,12 +234,45 @@ export const completeUploadController = async (c: Context) => {
       throw error;
     }
 
-    //if complete upload successfull, then update the document status to UPLOADED
+    console.log("upload completed successfully");
+
+    //add job to the queue
+    try {
+      await documentProcessorQueue.add(
+        JOB_NAMES.PROCESS_DOCUMENT,
+        {
+          documentId,
+        },
+        {
+          jobId: documentId,
+          attempts: 3,
+          backoff: {
+            type: "exponential",
+            delay: 1000,
+          },
+        },
+      );
+    } catch (error) {
+      console.error("Failed to enqueue document", error);
+
+      await prisma.document.update({
+        where: { id: documentId },
+        data: {
+          errorMessage: "Failed to queue document for processing",
+        },
+      });
+
+      throw error;
+    }
+
+    console.log("job added to the queue");
+
+    //if complete upload successfull, then update the document status to QUEUED
 
     const updatedDocument = await prisma.document.update({
       where: { id: documentId },
       data: {
-        status: "UPLOAD_COMPLETED",
+        status: "QUEUED",
       },
     });
 
