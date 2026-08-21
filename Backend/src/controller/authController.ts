@@ -1,7 +1,10 @@
 import prisma from "../db/dbConfig";
+import { Prisma } from "@prisma/client";
 import { signupSchema , loginSchema } from "../validators/authValidators";
 import { hashPassword, comparePassword } from "../utils/hashPass";
 import { generateAccessToken, generateRefreshToken } from "../utils/generateTokens";
+import { hashToken } from "../utils/hashToken";
+import { getTokenVersion, revokeAllSessions } from "../utils/tokenVersion";
 import {  setCookie, deleteCookie, getCookie} from 'hono/cookie'
 import type { Context } from "hono";
 
@@ -65,7 +68,7 @@ export const signupController = async (c: Context) => {
         // store refresh token
         await tx.refreshToken.create({
           data: {
-            token: refreshToken,
+            tokenHash: hashToken(refreshToken),
             userId: user.id,
             expiresAt: new Date(
               Date.now() + 7 * 24 * 60 * 60 * 1000
@@ -79,7 +82,7 @@ export const signupController = async (c: Context) => {
 
 
     // Generate Tokens
-    const accessToken = generateAccessToken(user.id);
+    const accessToken = generateAccessToken(user.id, user.tokenVersion);
 
 
     // Set Cookies accessToken
@@ -114,7 +117,47 @@ export const signupController = async (c: Context) => {
       201
     );
   } catch (error) {
-    console.error("Signup failed",error);
+    // Unique constraint on email — a concurrent signup won the race between
+    // the findUnique pre-check and this create. Return 409, not 500.
+    //
+    // Which field violated the constraint varies by Prisma engine:
+    //   - classic query engine:  meta.target = ["email"] (or constraint name)
+    //   - Prisma 7 driver adapter (this stack): meta.target is undefined;
+    //     the field lives at meta.driverAdapterError.cause.constraint.fields
+    // Read all three shapes so an unrelated unique violation (future
+    // @unique username, tokenHash) is not mislabeled as an email conflict.
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      const meta = error.meta as Record<string, unknown> | undefined;
+      const rawTarget = meta?.target as unknown;
+
+      let fields: unknown[] = [];
+      if (Array.isArray(rawTarget)) {
+        fields = rawTarget;
+      } else if (typeof rawTarget === "string") {
+        fields = [rawTarget];
+      } else {
+        const dae = meta?.driverAdapterError as
+          | { cause?: { constraint?: { fields?: unknown[] } } }
+          | undefined;
+        fields = dae?.cause?.constraint?.fields ?? [];
+      }
+
+      const isEmailConflict = fields.some(
+        (f) => f === "email" || f === "User_email_key"
+      );
+
+      if (error.code === "P2002" && isEmailConflict) {
+        return c.json(
+          {
+            success: false,
+            message: "User already exists",
+          },
+          409
+        );
+      }
+    }
+
+    console.error("Signup failed", error);
 
     return c.json(
       {
@@ -189,13 +232,13 @@ export const loginController = async (c: Context) => {
     });
 
     // 5. Generate tokens
-    const accessToken = generateAccessToken(user.id);
+    const accessToken = generateAccessToken(user.id, user.tokenVersion);
     const refreshToken = generateRefreshToken(user.id);
 
     // 6. Save refresh token in DB
     await prisma.refreshToken.create({
       data: {
-        token: refreshToken,
+        tokenHash: hashToken(refreshToken),
         userId: user.id,
         expiresAt: new Date(
           Date.now() + 7 * 24 * 60 * 60 * 1000
@@ -254,7 +297,7 @@ export const logoutController = async (c: Context) => {
     if (refreshToken) {
       await prisma.refreshToken.deleteMany({
         where: {
-          token: refreshToken,
+          tokenHash: hashToken(refreshToken),
         },
       });
     }
@@ -305,9 +348,11 @@ export const refreshController = async (c: Context) => {
     }
 
     // 2. Find token in DB
+    const tokenHash = hashToken(refreshToken);
+
     const storedToken = await prisma.refreshToken.findUnique({
       where: {
-        token: refreshToken,
+        tokenHash,
       },
     });
 
@@ -325,7 +370,7 @@ export const refreshController = async (c: Context) => {
     if (storedToken.expiresAt < new Date()) {
       await prisma.refreshToken.delete({
         where: {
-          token: refreshToken,
+          tokenHash,
         },
       });
 
@@ -339,20 +384,49 @@ export const refreshController = async (c: Context) => {
     }
 
     // 4. Generate new access token
-    const newAccessToken = generateAccessToken(storedToken.userId);
+    const tokenVersion = await getTokenVersion(storedToken.userId);
 
-    // 5. OPTIONAL: rotate refresh token (recommended)
+    if (tokenVersion === null) {
+      return c.json(
+        {
+          success: false,
+          message: "Invalid refresh token",
+        },
+        401
+      );
+    }
+
+    const newAccessToken = generateAccessToken(storedToken.userId, tokenVersion);
+
+    // 5. Rotate refresh token atomically.
+    //
+    // updateMany (not update) so a concurrent refresh for the same token
+    // returns count === 0 instead of throwing P2025. The WHERE token =
+    // old-token clause is re-evaluated at execution time, so exactly one
+    // request wins the rotation; the loser gets a clean 401 below.
     const newRefreshToken = generateRefreshToken(storedToken.userId);
 
-    await prisma.refreshToken.update({
+    const rotated = await prisma.refreshToken.updateMany({
       where: {
-        token: refreshToken,
+        tokenHash,
       },
       data: {
-        token: newRefreshToken,
+        tokenHash: hashToken(newRefreshToken),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
+
+    if (rotated.count === 0) {
+      // The token was already rotated (or deleted) by a concurrent request.
+      // Treat as a replay — do not issue new cookies.
+      return c.json(
+        {
+          success: false,
+          message: "Refresh token already used",
+        },
+        401,
+      );
+    }
 
     // 6. Set cookies again
     setCookie(c, "accessToken", newAccessToken, {
@@ -378,6 +452,34 @@ export const refreshController = async (c: Context) => {
     });
   } catch (error) {
     console.error("Refresh failed", error);
+
+    return c.json(
+      {
+        success: false,
+        message: "Internal Server Error",
+      },
+      500
+    );
+  }
+};
+
+// logout-all controller — revoke every session for the current user.
+export const logoutAllController = async (c: Context) => {
+  try {
+    const userId = c.get("userId");
+
+    await revokeAllSessions(userId);
+
+    // Clear cookies on this device too.
+    deleteCookie(c, "accessToken", { path: "/" });
+    deleteCookie(c, "refreshToken", { path: "/" });
+
+    return c.json({
+      success: true,
+      message: "Logged out from all devices",
+    });
+  } catch (error) {
+    console.error("Logout all failed", error);
 
     return c.json(
       {
