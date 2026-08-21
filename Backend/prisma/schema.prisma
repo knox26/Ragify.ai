@@ -31,6 +31,7 @@ model User {
   name          String
   email         String   @unique
   passwordHash  String
+  tokenVersion  Int      @default(0)
   emailVerified Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -42,13 +43,14 @@ model User {
 
 model RefreshToken {
   id        String   @id @default(uuid())
-  token     String   @unique
+  tokenHash String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([userId, expiresAt])
 }
 
 model Document {
@@ -71,5 +73,6 @@ model Document {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([status])
 }
