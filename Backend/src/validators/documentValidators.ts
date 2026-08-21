@@ -7,6 +7,7 @@ const ALLOWED_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
   "text/markdown",
+  "text/x-markdown", // legacy — parser already handles it
 ] as const;
 
 export const documentInitSchema = z.object({

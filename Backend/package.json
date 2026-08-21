@@ -2,14 +2,17 @@
   "name": "Backend",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "worker": "bun run --hot src/workers/documentWorker.ts"
+    "worker": "bun run --hot src/workers/documentWorker.ts",
+    "cron": "bun run src/jobs/scheduler.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
     "@aws-sdk/s3-request-presigner": "^3.1075.0",
+    "@google/genai": "^2.17.1",
     "@hono/zod-validator": "^0.8.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@qdrant/js-client-rest": "^1.19.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^6.0.6",
     "hono": "^4.12.25",
@@ -19,6 +22,7 @@
     "mammoth": "^1.12.0",
     "pg": "^8.21.0",
     "unpdf": "^1.8.0",
+    "uuid": "^14.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

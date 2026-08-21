@@ -4,6 +4,7 @@ import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   CompleteMultipartUploadCommandOutput,
+  HeadObjectCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 
@@ -148,6 +149,37 @@ export async function completeMultipartUpload({
   });
 
   return r2Client.send(command);
+}
+
+// ======================================================
+// Object Existence Check
+// ======================================================
+
+export async function r2ObjectExists(r2Key: string): Promise<boolean> {
+  try {
+    await r2Client.send(
+      new HeadObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: r2Key,
+      }),
+    );
+
+    return true;
+  } catch (error) {
+    const name = (error as { name?: string })?.name;
+    const httpStatusCode = (
+      error as { $metadata?: { httpStatusCode?: number } }
+    )?.$metadata?.httpStatusCode;
+
+    // 404 / NotFound means the object does not exist yet.
+    if (name === "NotFound" || httpStatusCode === 404) {
+      return false;
+    }
+
+    // Any other error (network, auth, throttling) means we cannot determine
+    // existence — propagate it so the caller can decide.
+    throw error;
+  }
 }
 
 

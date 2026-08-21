@@ -7,7 +7,6 @@ export interface DocumentMetadata {
 export interface ParseDocumentParams {
   buffer: Buffer;
   mimeType: string;
-  metadata: DocumentMetadata;
 }
 
 export interface ParsedPage {

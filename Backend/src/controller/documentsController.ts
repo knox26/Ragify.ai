@@ -12,11 +12,8 @@ import {
   generatePresignedUrls,
   abortMultipartUpload,
   completeMultipartUpload,
+  r2ObjectExists,
 } from "../services/r2Service";
-
-import { JOB_NAMES } from "../queues/queueConstants";
-
-import { documentProcessorQueue } from "../queues/documentQueue";
 
 export const initUploadController = async (c: Context) => {
   try {
@@ -181,10 +178,32 @@ export const completeUploadController = async (c: Context) => {
     }
 
     if (document.status !== "PENDING_UPLOAD") {
+      // Idempotency: a duplicate complete-upload should not fail if the
+      // document already progressed past PENDING_UPLOAD. Return its current
+      // status instead. FAILED stays an error so the client re-inits.
+      if (
+        document.status === "UPLOAD_COMPLETED" ||
+        document.status === "QUEUED" ||
+        document.status === "PROCESSING" ||
+        document.status === "COMPLETED"
+      ) {
+        return c.json(
+          {
+            success: true,
+            message: "Upload already completed",
+            data: {
+              documentId,
+              status: document.status,
+            },
+          },
+          200,
+        );
+      }
+
       return c.json(
         {
           success: false,
-          message: "Document is not in PENDING_UPLOAD state",
+          message: `Document is not in PENDING_UPLOAD state (current: ${document.status})`,
         },
         400,
       );
@@ -198,7 +217,7 @@ export const completeUploadController = async (c: Context) => {
     }
 
     try {
-      const completeUploadResponse = await completeMultipartUpload({
+      await completeMultipartUpload({
         r2Key: document.r2Key,
         uploadId: document.uploadId,
         parts: chunks.map(({ chunkNumber, etag }) => ({
@@ -206,83 +225,93 @@ export const completeUploadController = async (c: Context) => {
           etag,
         })),
       });
-
-      // if complete upload fails, then abort the upload
-
-      if (completeUploadResponse.$metadata.httpStatusCode !== 200) {
-        throw new Error("Failed to complete multipart upload");
-      }
     } catch (error) {
+      // CompleteMultipartUpload is NOT idempotent. A retry after a lost
+      // response (or a crash between the R2 call and the status write)
+      // re-calls it and gets NoSuchUpload. Before declaring failure, check
+      // whether the finished object already exists — if it does, the
+      // previous attempt actually succeeded.
+      let alreadyCompleted = false;
+
       try {
-        await abortMultipartUpload({
-          r2Key: document.r2Key,
-          uploadId: document.uploadId,
-        });
-      } catch (abortError) {
-        console.error(abortError);
+        alreadyCompleted = await r2ObjectExists(document.r2Key);
+      } catch (headError) {
+        // Could not determine object existence (network/auth error). Do NOT
+        // mark FAILED — the document stays PENDING_UPLOAD so a later retry
+        // can recover once R2 is reachable again.
+        throw error;
       }
 
-      await prisma.document.update({
-        where: { id: documentId },
-        data: {
-          status: "FAILED",
-          errorMessage:
-            error instanceof Error ? error.message : "Upload failed",
-        },
-      });
+      if (!alreadyCompleted) {
+        // Genuine failure: no object, so the upload never completed.
+        try {
+          await abortMultipartUpload({
+            r2Key: document.r2Key,
+            uploadId: document.uploadId,
+          });
+        } catch (abortError) {
+          console.error(abortError);
+        }
 
-      throw error;
+        await prisma.document.update({
+          where: { id: documentId },
+          data: {
+            status: "FAILED",
+            errorMessage:
+              error instanceof Error ? error.message : "Upload failed",
+          },
+        });
+
+        throw error;
+      }
+
+      // Object exists — the previous attempt completed successfully.
+      // Fall through to the atomic claim below.
     }
 
     console.log("upload completed successfully");
 
-    //add job to the queue
-    try {
-      await documentProcessorQueue.add(
-        JOB_NAMES.PROCESS_DOCUMENT,
-        {
-          documentId,
-        },
-        {
-          jobId: documentId,
-          attempts: 3,
-          backoff: {
-            type: "exponential",
-            delay: 1000,
-          },
-        },
-      );
-    } catch (error) {
-      console.error("Failed to enqueue document", error);
+    // Atomically move PENDING_UPLOAD -> UPLOAD_COMPLETED.
+    //
+    // No Redis call here: the request path only records that the upload is
+    // done. The scheduler (src/jobs/scheduler.ts) polls for UPLOAD_COMPLETED
+    // documents and enqueues them into BullMQ.
+    //
+    // This keeps uploads independent of Redis availability and closes the
+    // "QUEUED but never enqueued" gap from enqueueing in the request path.
+    const completed = await prisma.document.updateMany({
+      where: { id: documentId, status: "PENDING_UPLOAD" },
+      data: { status: "UPLOAD_COMPLETED" },
+    });
 
-      await prisma.document.update({
+    if (completed.count === 0) {
+      // Another request already claimed this document — duplicate
+      // complete-upload. Return its current status.
+      const current = await prisma.document.findUnique({
         where: { id: documentId },
-        data: {
-          errorMessage: "Failed to queue document for processing",
-        },
+        select: { status: true },
       });
 
-      throw error;
+      return c.json(
+        {
+          success: true,
+          message: "Upload already completed",
+          data: {
+            documentId,
+            status: current?.status,
+          },
+        },
+        200,
+      );
     }
-
-    console.log("job added to the queue");
-
-    //if complete upload successfull, then update the document status to QUEUED
-
-    const updatedDocument = await prisma.document.update({
-      where: { id: documentId },
-      data: {
-        status: "QUEUED",
-      },
-    });
 
     return c.json(
       {
         success: true,
         message: "Upload completed successfully",
         data: {
-          documentId: updatedDocument.id,
-          status: updatedDocument.status,
+          documentId,
+          status: "UPLOAD_COMPLETED",
         },
       },
       200,

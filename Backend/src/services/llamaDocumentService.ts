@@ -1,17 +1,16 @@
-import { Document, SentenceSplitter, type TextNode } from "llamaindex";
+import { Document, SentenceSplitter } from "llamaindex";
 import type { ParsedPage } from "../parsers/parserTypes";
 
-interface CreateLlamaNodesParams {
+interface CreateLlamaChunksParams {
   pages: ParsedPage[];
   documentId: string;
-  userId: string;
-  fileName: string;
 }
 
-interface NodeMetadata {
-  documentId: string;
-  userId: string;
-  fileName: string;
+export interface ProcessedChunk {
+  chunkIndex: number;
+  text: string;
+  startOffset: number;
+  endOffset: number;
   pageStart: number;
   pageEnd: number;
 }
@@ -63,7 +62,6 @@ export function getPageRange(
   pageStart: number;
   pageEnd: number;
 } {
-  // A valid chunk must have a positive length.
   if (chunkStart >= chunkEnd) {
     throw new Error(
       `Invalid chunk range: start (${chunkStart}) must be less than end (${chunkEnd})`,
@@ -87,29 +85,39 @@ export function getPageRange(
   };
 }
 
-export async function createLlamaNodes({
+/**
+ * Create lightweight application-level chunks from a document.
+ *
+ * LlamaIndex is used only for:
+ *
+ *   Document -> SentenceSplitter -> TextNode[]
+ *
+ * The LlamaIndex TextNode objects are immediately converted into
+ * ProcessedChunk objects so they do not need to travel through
+ * the rest of the processing pipeline.
+ */
+export async function createLlamaChunks({
   pages,
   documentId,
-  userId,
-  fileName,
-}: CreateLlamaNodesParams): Promise<TextNode[]> {
+}: CreateLlamaChunksParams): Promise<ProcessedChunk[]> {
   if (pages.length === 0) {
     return [];
   }
 
   try {
-    // 1. Combine all pages into one continuous text
-    //    while remembering where every page starts/ends.
+    // 1. Combine all pages into one continuous text while
+    //    remembering the offsets of every original page.
     const { text, pageOffsets } = combinePages(pages);
 
-    // 2. Create ONE LlamaIndex Document for the entire file.
+    // 2. Create one LlamaIndex Document for the entire file.
     const llamaDocument = new Document({
       text,
       id_: documentId,
     });
 
-    // 3. Chunk the entire document.
-    //    Chunks are therefore allowed to cross page boundaries.
+    // 3. Split the document into semantic chunks.
+    //
+    // Chunks are allowed to cross page boundaries.
     const splitter = new SentenceSplitter({
       chunkSize: 512,
       chunkOverlap: 50,
@@ -117,8 +125,9 @@ export async function createLlamaNodes({
 
     const nodes = splitter.getNodesFromDocuments([llamaDocument]);
 
-    // 4. Attach our own metadata to every generated node.
-    return nodes.map((node) => {
+    // 4. Immediately convert LlamaIndex nodes into our
+    //    lightweight application representation.
+    return nodes.map((node, index) => {
       const { startCharIdx, endCharIdx } = node;
 
       if (startCharIdx === undefined || endCharIdx === undefined) {
@@ -127,34 +136,32 @@ export async function createLlamaNodes({
         );
       }
 
-      // 5. Determine which real pages this chunk overlaps.
+      // Extract the chunk text once.
+      const chunkText = node.getContent();
+
+      if (!chunkText.trim()) {
+        throw new Error(`LlamaIndex node ${node.id_} contains empty text`);
+      }
+
+      // Determine which original pages this chunk overlaps.
       const { pageStart, pageEnd } = getPageRange(
         startCharIdx,
         endCharIdx,
         pageOffsets,
       );
 
-      const metadata = {
-        documentId,
-        userId,
-        fileName,
+      return {
+        chunkIndex: index,
+        text: chunkText,
+        startOffset: startCharIdx,
+        endOffset: endCharIdx,
         pageStart,
         pageEnd,
-      } satisfies NodeMetadata;
-
-      node.metadata = {
-        ...node.metadata,
-        ...metadata,
       };
-
-      return node;
     });
   } catch (error) {
-    throw new Error(
-      `Failed to create Llama nodes for document "${documentId}"`,
-      {
-        cause: error,
-      },
-    );
+    throw new Error(`Failed to create chunks for document "${documentId}"`, {
+      cause: error,
+    });
   }
 }

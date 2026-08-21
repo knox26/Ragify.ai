@@ -3,8 +3,9 @@ import { readFile } from "node:fs/promises";
 
 import { parsePdf } from "../parsers/pdfParser";
 import { parseDocx } from "../parsers/docxParser";
-import { createLlamaNodes } from "../services/llamaDocumentService";
+import { createLlamaChunks } from "../services/llamaDocumentService";
 import { PAGE_SEPARATOR } from "../services/llamaDocumentService";
+import { MIME_TYPES } from "../parsers/mimeTypes";
 
 describe("PDF parsing integration", () => {
   const fixturePath = new URL("./fixtures/unicode.pdf", import.meta.url);
@@ -16,7 +17,7 @@ describe("PDF parsing integration", () => {
   test("should parse unicode.pdf into valid ParsedPage objects", async () => {
     const buffer = await loadFixture();
 
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
     expect(pages.length).toBeGreaterThan(0);
 
@@ -42,7 +43,7 @@ describe("PDF parsing integration", () => {
   test("should preserve unicode text from the real PDF fixture", async () => {
     const buffer = await loadFixture();
 
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
     const combinedText = pages.map((page) => page.text).join("\n");
 
@@ -63,14 +64,14 @@ describe("PDF parsing integration", () => {
   test("should return trimmed page text", async () => {
     const buffer = await loadFixture();
 
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
     for (const page of pages) {
       expect(page.text).toBe(page.text.trim());
     }
   });
 
-  test("should create LlamaIndex nodes from real parsed PDF pages", async () => {
+  test("should create chunks from real parsed PDF pages", async () => {
     const buffer = await loadFixture();
 
     /*
@@ -79,74 +80,53 @@ describe("PDF parsing integration", () => {
      * No synthetic ParsedPage objects.
      * No mocks.
      */
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
     expect(pages.length).toBeGreaterThan(0);
 
-    const nodes = await createLlamaNodes({
+    const chunks = await createLlamaChunks({
       pages,
       documentId: "unicode-test-id",
-      userId: "test-user-id",
-      fileName: "unicode.pdf",
     });
 
-    expect(nodes.length).toBeGreaterThan(0);
+    expect(chunks.length).toBeGreaterThan(0);
 
     const maxRealPage = Math.max(...pages.map((page) => page.pageNumber));
 
-    for (const node of nodes) {
+    for (const chunk of chunks) {
       /*
        * Character offsets must exist.
        */
-      expect(node.startCharIdx).toBeDefined();
-      expect(node.endCharIdx).toBeDefined();
-
-      if (node.startCharIdx === undefined || node.endCharIdx === undefined) {
-        throw new Error("Generated node is missing character offsets");
-      }
-
-      expect(node.startCharIdx).toBeGreaterThanOrEqual(0);
-      expect(node.endCharIdx).toBeGreaterThan(node.startCharIdx);
+      expect(chunk.startOffset).toBeGreaterThanOrEqual(0);
+      expect(chunk.endOffset).toBeGreaterThan(chunk.startOffset);
 
       /*
        * Page metadata must exist and reference real pages.
        */
-      expect(node.metadata.pageStart).toBeGreaterThan(0);
-      expect(node.metadata.pageEnd).toBeGreaterThanOrEqual(
-        node.metadata.pageStart,
-      );
-
-      expect(node.metadata.pageEnd).toBeLessThanOrEqual(maxRealPage);
+      expect(chunk.pageStart).toBeGreaterThan(0);
+      expect(chunk.pageEnd).toBeGreaterThanOrEqual(chunk.pageStart);
+      expect(chunk.pageEnd).toBeLessThanOrEqual(maxRealPage);
 
       /*
-       * Ragify metadata must be attached correctly.
+       * Every chunk must contain actual text.
        */
-      expect(node.metadata.documentId).toBe("unicode-test-id");
-      expect(node.metadata.userId).toBe("test-user-id");
-      expect(node.metadata.fileName).toBe("unicode.pdf");
-
-      /*
-       * Every node must contain actual text.
-       */
-      expect(node.text.length).toBeGreaterThan(0);
+      expect(chunk.text.length).toBeGreaterThan(0);
     }
   });
 
   test("should preserve Unicode text through the full PDF-to-LlamaIndex pipeline", async () => {
     const buffer = await loadFixture();
 
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
-    const nodes = await createLlamaNodes({
+    const chunks = await createLlamaChunks({
       pages,
       documentId: "unicode-test-id",
-      userId: "test-user-id",
-      fileName: "unicode.pdf",
     });
 
-    expect(nodes.length).toBeGreaterThan(0);
+    expect(chunks.length).toBeGreaterThan(0);
 
-    const nodeText = nodes.map((node) => node.text).join("\n");
+    const chunkText = chunks.map((chunk) => chunk.text).join("\n");
 
     /*
      * This is stronger than testing parsePdf alone:
@@ -161,29 +141,27 @@ describe("PDF parsing integration", () => {
      *   ↓
      * SentenceSplitter
      *   ↓
-     * LlamaIndex nodes
+     * ProcessedChunk[]
      *
      * We verify that Unicode survives the complete pipeline.
      */
-    expect(nodeText).toContain("Café");
-    expect(nodeText).toContain("日本語");
-    expect(nodeText).toContain("😀");
-    expect(nodeText).toContain("🚀");
+    expect(chunkText).toContain("Café");
+    expect(chunkText).toContain("日本語");
+    expect(chunkText).toContain("😀");
+    expect(chunkText).toContain("🚀");
   });
 
-  test("should keep generated node offsets inside the real combined document", async () => {
+  test("should keep generated chunk offsets inside the real combined document", async () => {
     const buffer = await loadFixture();
 
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
-    const nodes = await createLlamaNodes({
+    const chunks = await createLlamaChunks({
       pages,
       documentId: "unicode-test-id",
-      userId: "test-user-id",
-      fileName: "unicode.pdf",
     });
 
-    expect(nodes.length).toBeGreaterThan(0);
+    expect(chunks.length).toBeGreaterThan(0);
 
     /*
      * Reconstruct the same combined document representation used
@@ -195,21 +173,14 @@ describe("PDF parsing integration", () => {
      */
     const combinedText = pages.map((page) => page.text).join("\n\n");
 
-    for (const node of nodes) {
-      expect(node.startCharIdx).toBeDefined();
-      expect(node.endCharIdx).toBeDefined();
-
-      if (node.startCharIdx === undefined || node.endCharIdx === undefined) {
-        throw new Error("Generated node is missing character offsets");
-      }
-
-      expect(node.startCharIdx).toBeGreaterThanOrEqual(0);
-      expect(node.endCharIdx).toBeLessThanOrEqual(combinedText.length);
-      expect(node.endCharIdx).toBeGreaterThan(node.startCharIdx);
+    for (const chunk of chunks) {
+      expect(chunk.startOffset).toBeGreaterThanOrEqual(0);
+      expect(chunk.endOffset).toBeLessThanOrEqual(combinedText.length);
+      expect(chunk.endOffset).toBeGreaterThan(chunk.startOffset);
     }
   });
 
-  test("should return no pages and no LlamaIndex nodes for a scanned PDF with no text layer", async () => {
+  test("should return no pages and no chunks for a scanned PDF with no text layer", async () => {
     const fixturePath = new URL(
       "./fixtures/scanned-no-text.pdf",
       import.meta.url,
@@ -217,7 +188,7 @@ describe("PDF parsing integration", () => {
 
     const buffer = await readFile(fixturePath);
 
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
     /*
      * The fixture contains only a rasterized image and no
@@ -225,18 +196,16 @@ describe("PDF parsing integration", () => {
      */
     expect(pages).toEqual([]);
 
-    const nodes = await createLlamaNodes({
+    const chunks = await createLlamaChunks({
       pages,
       documentId: "scanned-test-id",
-      userId: "test-user-id",
-      fileName: "scanned-no-text.pdf",
     });
 
     /*
      * With no parsed pages, there is nothing for LlamaIndex
-     * to split into nodes.
+     * to split into chunks.
      */
-    expect(nodes).toEqual([]);
+    expect(chunks).toEqual([]);
   });
 
   test("should preserve real page numbers when an image-only page is in the middle", async () => {
@@ -247,7 +216,7 @@ describe("PDF parsing integration", () => {
 
     const buffer = await readFile(fixturePath);
 
-    const pages = await parsePdf({ buffer });
+    const pages = await parsePdf({ buffer, mimeType: MIME_TYPES.PDF });
 
     // Page 3 is image-only and should have no extracted text.
     expect(pages.map((page) => page.pageNumber)).toEqual([1, 2, 4]);
@@ -257,19 +226,17 @@ describe("PDF parsing integration", () => {
     expect(pages[1].text).toContain("Synthetic Dataset — Product Inventory");
     expect(pages[2].text).toContain("Synthetic Report — Customer Activity");
 
-    const nodes = await createLlamaNodes({
+    const chunks = await createLlamaChunks({
       pages,
       documentId: "partial-scan-test-id",
-      userId: "test-user-id",
-      fileName: "partially-scanned.pdf",
     });
 
-    expect(nodes.length).toBeGreaterThan(0);
+    expect(chunks.length).toBeGreaterThan(0);
 
-    // No generated node should reference the image-only page 3.
-    for (const node of nodes) {
-      expect(node.metadata.pageStart).not.toBe(3);
-      expect(node.metadata.pageEnd).not.toBe(3);
+    // No generated chunk should reference the image-only page 3.
+    for (const chunk of chunks) {
+      expect(chunk.pageStart).not.toBe(3);
+      expect(chunk.pageEnd).not.toBe(3);
     }
   });
 });
@@ -283,7 +250,7 @@ describe("DOCX parsing integration", () => {
 
     const buffer = await readFile(fixturePath);
 
-    const pages = await parseDocx({ buffer });
+    const pages = await parseDocx({ buffer, mimeType: MIME_TYPES.DOCX });
 
     // parseDocx currently represents a DOCX as a single logical page.
     expect(pages).toHaveLength(1);
@@ -323,7 +290,7 @@ describe("DOCX parsing integration", () => {
     expect(page.text).toContain("PostgreSQL, Redis");
   });
 
-  test("should create LlamaIndex nodes from real parsed DOCX pages", async () => {
+  test("should create chunks from real parsed DOCX pages", async () => {
     const fixturePath = new URL(
       "./fixtures/synthetic-resume.docx",
       import.meta.url,
@@ -332,63 +299,48 @@ describe("DOCX parsing integration", () => {
     const buffer = await readFile(fixturePath);
 
     // Real DOCX parsing — no mocking.
-    const pages = await parseDocx({ buffer });
+    const pages = await parseDocx({ buffer, mimeType: MIME_TYPES.DOCX });
 
     expect(pages).toHaveLength(1);
 
     const combinedText = pages.map((page) => page.text).join(PAGE_SEPARATOR);
 
-    const nodes = await createLlamaNodes({
+    const chunks = await createLlamaChunks({
       pages,
       documentId: "docx-integration-test",
-      userId: "test-user-id",
-      fileName: "synthetic-resume.docx",
     });
 
     /*
-     * The current DOCX fixture produces exactly one node.
+     * The current DOCX fixture produces exactly one chunk.
      * Keep this explicit so a change in chunking behavior is detected.
      */
-    expect(nodes).toHaveLength(1);
+    expect(chunks).toHaveLength(1);
 
-    for (const node of nodes) {
-      expect(node.text.length).toBeGreaterThan(0);
+    for (const chunk of chunks) {
+      expect(chunk.text.length).toBeGreaterThan(0);
 
       // Verify known content survived the complete pipeline.
-      expect(node.text).toContain("Jordan Ashworth");
-      expect(node.text).toContain("PROFESSIONAL SUMMARY");
-      expect(node.text).toContain("Senior Backend Engineer");
-      expect(node.text).toContain("Northwind Systems");
-      expect(node.text).toContain("Harborlight — Distributed Job Scheduler");
+      expect(chunk.text).toContain("Jordan Ashworth");
+      expect(chunk.text).toContain("PROFESSIONAL SUMMARY");
+      expect(chunk.text).toContain("Senior Backend Engineer");
+      expect(chunk.text).toContain("Northwind Systems");
+      expect(chunk.text).toContain("Harborlight — Distributed Job Scheduler");
 
       // DOCX currently produces one logical page.
-      expect(node.metadata.pageStart).toBe(1);
-      expect(node.metadata.pageEnd).toBe(1);
-
-      // Ragify metadata.
-      expect(node.metadata.documentId).toBe("docx-integration-test");
-      expect(node.metadata.userId).toBe("test-user-id");
-      expect(node.metadata.fileName).toBe("synthetic-resume.docx");
+      expect(chunk.pageStart).toBe(1);
+      expect(chunk.pageEnd).toBe(1);
 
       // LlamaIndex must provide character offsets.
-      expect(node.startCharIdx).toBeDefined();
-      expect(node.endCharIdx).toBeDefined();
-
-      if (node.startCharIdx === undefined || node.endCharIdx === undefined) {
-        throw new Error("Generated node is missing character offsets");
-      }
-
-      // Offset invariants.
-      expect(node.startCharIdx).toBeGreaterThanOrEqual(0);
-      expect(node.endCharIdx).toBeGreaterThan(node.startCharIdx);
-      expect(node.endCharIdx).toBeLessThanOrEqual(combinedText.length);
+      expect(chunk.startOffset).toBeGreaterThanOrEqual(0);
+      expect(chunk.endOffset).toBeLessThanOrEqual(combinedText.length);
+      expect(chunk.endOffset).toBeGreaterThan(chunk.startOffset);
 
       /*
        * Most important offset invariant:
-       * the character range must reproduce the exact node text.
+       * the character range must reproduce the exact chunk text.
        */
-      expect(combinedText.slice(node.startCharIdx, node.endCharIdx)).toBe(
-        node.text,
+      expect(combinedText.slice(chunk.startOffset, chunk.endOffset)).toBe(
+        chunk.text,
       );
     }
   });
