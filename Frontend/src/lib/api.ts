@@ -15,6 +15,11 @@ export interface ApiResponse<T = unknown> {
   data?: T;
 }
 
+// Auth endpoints return the user at the top level, not inside `data`.
+export interface AuthResponse extends Omit<ApiResponse<AuthUser>, "data"> {
+  user: AuthUser;
+}
+
 export type DocumentStatus =
   | "PENDING_UPLOAD"
   | "UPLOAD_COMPLETED"
@@ -33,6 +38,9 @@ export interface Document {
 }
 
 export interface InitUploadRequest {
+  // Client-generated idempotency key — a retry reuses it so the server
+  // returns the existing upload instead of creating an orphan.
+  documentId: string;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -43,11 +51,11 @@ export interface PresignedPart {
   url: string;
 }
 
-export interface InitUploadResponse {
-  documentId: string;
-  chunkSize: number;
-  presignedUrls: PresignedPart[];
-}
+export type InitUploadResponse =
+  // Fresh init — client uploads parts.
+  | { documentId: string; chunkSize: number; presignedUrls: PresignedPart[] }
+  // Idempotent retry that found the document already past init — no parts.
+  | { documentId: string; status: DocumentStatus };
 
 export interface UploadedChunk {
   chunkNumber: number;
@@ -78,6 +86,35 @@ export class ApiError extends Error {
   }
 }
 
+// Maps an error to copy a user can act on. A backend 500's raw message is
+// "Internal Server Error" — technically true, useless in a UI. Status codes
+// are the actionable signal; unmapped 4xx keep the server's message (usually
+// specific validation copy), and any raw message survives as a fallback so no
+// detail is lost.
+export function getFriendlyErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    switch (error.status) {
+      case 0: // axios: no response (network down, timeout)
+        return "Can't reach the server. Check your connection and try again.";
+      case 401:
+        return "Your session expired. Sign in again to continue.";
+      case 403:
+        return "You don't have permission to do that.";
+      case 404:
+        return "We couldn't find what you're looking for.";
+      default:
+        if (error.status >= 500) {
+          return "The server ran into a problem. Try again in a moment.";
+        }
+        return error.message || "Something went wrong. Please try again.";
+    }
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Something went wrong. Please try again.";
+}
+
 // ---- Token refresh orchestration ----
 
 let isRefreshing = false;
@@ -90,6 +127,13 @@ function onRefreshed(ok: boolean): void {
   }
   refreshSubscribers.length = 0;
 }
+
+// Metadata requests (auth, init/complete upload, list) are small — a stalled
+// connection should surface as an error, not hang the UI. Applies to the
+// refresh POST too: without it, a silently stalled refresh would never settle,
+// isRefreshing would stay true, and every later 401 would queue a subscriber
+// and wait forever (freezing all authenticated calls).
+const API_TIMEOUT_MS = 30_000;
 
 async function attemptTokenRefresh(): Promise<boolean> {
   // If another refresh is already in-flight, queue this caller and wait
@@ -107,6 +151,7 @@ async function attemptTokenRefresh(): Promise<boolean> {
         {},
         {
           withCredentials: true,
+          timeout: API_TIMEOUT_MS,
         },
       );
       const ok = res.status >= 200 && res.status < 300;
@@ -137,6 +182,7 @@ async function apiRequest<T>(
     const response = await axios({
       url,
       withCredentials: true,
+      timeout: API_TIMEOUT_MS,
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -149,7 +195,7 @@ async function apiRequest<T>(
     }
 
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (axios.isAxiosError(error) && error.response) {
       if (error.response.status === 401 && attemptRefresh) {
         const refreshed = await attemptTokenRefresh();
@@ -173,14 +219,14 @@ async function apiRequest<T>(
 
 export const api = {
   signup(data: { name: string; email: string; password: string }) {
-    return apiRequest<ApiResponse<AuthUser>>(API_ENDPOINTS.SIGNUP, {
+    return apiRequest<AuthResponse>(API_ENDPOINTS.SIGNUP, {
       method: "POST",
       data,
     });
   },
 
   login(data: { email: string; password: string }) {
-    return apiRequest<ApiResponse<AuthUser>>(API_ENDPOINTS.LOGIN, {
+    return apiRequest<AuthResponse>(API_ENDPOINTS.LOGIN, {
       method: "POST",
       data,
     });
@@ -198,20 +244,22 @@ export const api = {
     });
   },
 
-  initializeUpload(data: InitUploadRequest) {
+  initializeUpload(data: InitUploadRequest, config?: AxiosRequestConfig) {
     return apiRequest<ApiResponse<InitUploadResponse>>(
       API_ENDPOINTS.DOCUMENTS_INIT_UPLOAD,
       {
         method: "POST",
         data,
+        ...config,
       },
     );
   },
 
-  completeUpload(data: CompleteUploadRequest) {
+  completeUpload(data: CompleteUploadRequest, config?: AxiosRequestConfig) {
     return apiRequest<ApiResponse>(API_ENDPOINTS.DOCUMENTS_COMPLETE_UPLOAD, {
       method: "POST",
       data,
+      ...config,
     });
   },
 

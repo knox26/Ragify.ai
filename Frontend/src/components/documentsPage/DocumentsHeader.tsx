@@ -1,31 +1,21 @@
 import { UploadButton } from "./UploadButton";
-import { UploadModal } from "./UploadModal";
-import { useState } from "react";
 
 type DocumentsHeaderProps = {
-  onUploadSuccess: () => void;
+  onUploadClick: () => void;
 };
 
-export function DocumentsHeader({ onUploadSuccess }: DocumentsHeaderProps) {
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
+export function DocumentsHeader({ onUploadClick }: DocumentsHeaderProps) {
   return (
-    <>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Documents</h1>
+    <div className="flex items-start justify-between">
+      <div>
+        <h1 className="text-3xl font-bold">Documents</h1>
 
-          <p className="text-secondary mt-2">
-            Manage your uploaded knowledge base.
-          </p>
-        </div>
-
-        <UploadButton onClick={() => setIsUploadOpen(true)} />
+        <p className="text-secondary mt-2">
+          Manage your uploaded knowledge base.
+        </p>
       </div>
-      <UploadModal
-        open={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
-        onUploadSuccess={onUploadSuccess}
-      />
-    </>
+
+      <UploadButton onClick={onUploadClick} />
+    </div>
   );
 }
