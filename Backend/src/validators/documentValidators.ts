@@ -11,6 +11,11 @@ const ALLOWED_MIME_TYPES = [
 ] as const;
 
 export const documentInitSchema = z.object({
+  // Client-generated idempotency key. A retry after a lost response reuses
+  // the same documentId, so the server returns the existing upload instead
+  // of creating an orphaned document + R2 multipart.
+  documentId: z.uuid(),
+
   fileName: z.string().min(1).max(255),
 
   fileSize: z

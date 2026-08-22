@@ -34,13 +34,73 @@ export const initUploadController = async (c: Context) => {
 
     const userId = c.get("userId");
 
-    const { fileName, fileSize, mimeType } = result.data;
+    const { documentId, fileName, fileSize, mimeType } = result.data;
 
     const { chunkSize, totalChunks } = calculateMultipartInfo(fileSize);
 
-    const documentId = crypto.randomUUID();
-
     const r2Key = generateR2Key(userId, documentId);
+
+    // Idempotency: the client-generated documentId doubles as the retry key.
+    // A retry after a lost response (network drop / crash between the row
+    // create and the R2 create) reuses the same documentId, so look it up
+    // before creating anything new — otherwise every retry orphans the
+    // previous PENDING_UPLOAD row and its R2 multipart upload.
+    const existing = await prisma.document.findUnique({
+      where: { id: documentId, userId },
+    });
+
+    if (existing) {
+      // Already progressed past init — a prior complete-upload (or failure)
+      // moved the state machine on. Report where things stand instead of
+      // creating a duplicate.
+      if (existing.status !== "PENDING_UPLOAD") {
+        return c.json(
+          {
+            success: true,
+            message: "Upload already initialized",
+            data: {
+              documentId,
+              status: existing.status,
+            },
+          },
+          200,
+        );
+      }
+
+      let uploadId = existing.uploadId;
+
+      if (!uploadId) {
+        // Crash between row creation and multipart creation — recreate.
+        uploadId = await createMultipartUpload({ r2Key, mimeType });
+
+        await prisma.document.update({
+          where: { id: documentId },
+          data: { uploadId },
+        });
+      }
+
+      // Reuse the SAME uploadId (a fresh multipart would orphan the old one)
+      // and regenerate presigned URLs — the previous ones may have expired by
+      // the time the client retries.
+      const presignedUrls = await generatePresignedUrls({
+        r2Key,
+        uploadId,
+        totalChunks,
+      });
+
+      return c.json(
+        {
+          success: true,
+          message: "Upload already initialized",
+          data: {
+            documentId,
+            chunkSize,
+            presignedUrls,
+          },
+        },
+        200,
+      );
+    }
 
     // Create document row first
     await prisma.document.create({
@@ -268,8 +328,6 @@ export const completeUploadController = async (c: Context) => {
       // Object exists — the previous attempt completed successfully.
       // Fall through to the atomic claim below.
     }
-
-    console.log("upload completed successfully");
 
     // Atomically move PENDING_UPLOAD -> UPLOAD_COMPLETED.
     //
