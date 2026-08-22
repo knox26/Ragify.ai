@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Menu, X, Moon, Sun, Search } from 'lucide-react';
-import { useTheme } from '../../hooks/useTheme';
+import { Menu, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
+import { RagifyMark } from '../ui/RagifyMark';
+
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -18,125 +18,101 @@ export function Navbar() {
   }, []);
 
   const navLinks = [
-    { name: 'Features', href: '#features' },
-    { name: 'How It Works', href: '#how-it-works' },
-    { name: 'Pricing', href: '#pricing' },
+    { name: 'Capabilities', href: '#features' },
+    { name: 'How it works', href: '#how-it-works' },
     { name: 'FAQ', href: '#faq' },
   ];
 
   return (
-    <header
-      className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b',
-        isScrolled
-          ? 'glass border-[var(--border-color)] py-3'
-          : 'bg-transparent border-transparent py-5'
-      )}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center">
-              <Search className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Ragify</span>
-          </div>
-
-          {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                className="text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                {link.name}
-              </a>
-            ))}
-          </nav>
-
-          {/* Actions */}
-          <div className="hidden md:flex items-center gap-4">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-[var(--bg-card)] transition-colors border border-transparent hover:border-[var(--border-color)]"
-              aria-label="Toggle theme"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" />
-              ) : (
-                <Moon className="w-5 h-5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" />
-              )}
-            </button>
-            <Link
-              to="/login"
-              className="text-sm font-medium text-[var(--text-primary)] hover:opacity-80 transition-opacity"
-            >
-              Login
-            </Link>
-            <Link
-              to="/signup"
-              className="text-sm font-medium bg-[var(--text-primary)] text-[var(--bg-primary)] px-4 py-2 rounded-full hover:scale-105 transition-transform"
-            >
-              Get Started
-            </Link>
-          </div>
-
-          {/* Mobile Menu Toggle */}
-          <button
-            className="md:hidden p-2 text-[var(--text-primary)]"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="md:hidden glass absolute top-full left-0 right-0 border-b border-[var(--border-color)]"
+    <header className="fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="max-w-5xl mx-auto">
+        {/* Floating pill — detached, full-round, transparent dark, blur */}
+        <div
+          className={cn(
+            'mt-4 rounded-2xl border backdrop-blur-xl backdrop-saturate-150 transition-colors duration-300',
+            'border-white/10 bg-white/5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]',
+            isScrolled && 'bg-white/10'
+          )}
         >
-          <div className="px-4 py-6 flex flex-col gap-4">
-            {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                className="text-base font-medium text-[var(--text-primary)]"
-                onClick={() => setIsMobileMenuOpen(false)}
+          <div className="flex items-center justify-between h-14 px-3 md:px-4">
+            {/* Logo — monochrome mark, white CTA carries the contrast */}
+            <Link to="/" className="flex items-center gap-2.5 pl-1 md:pl-2 shrink-0">
+              <div className="w-8 h-8 rounded-full bg-[var(--text-primary)] flex items-center justify-center">
+                <RagifyMark className="w-4 h-4 text-[var(--bg-primary)]" />
+              </div>
+              <span className="text-lg font-bold tracking-tight text-[var(--text-primary)]">Ragify</span>
+            </Link>
+
+            {/* Center nav — truly centered, muted → white hover */}
+            <nav className="hidden md:flex items-center gap-7 absolute left-1/2 -translate-x-1/2">
+              {navLinks.map((link) => (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  className="text-sm font-medium text-neutral-400 hover:text-white transition-colors"
+                >
+                  {link.name}
+                </a>
+              ))}
+            </nav>
+
+            {/* Right — solid white pill CTA with dark text */}
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                to="/login"
+                className="hidden md:block text-sm font-medium text-neutral-300 hover:text-white transition-colors"
               >
-                {link.name}
-              </a>
-            ))}
-            <div className="h-px bg-[var(--border-color)] w-full my-2" />
-            <div className="flex items-center justify-between">
-              <span className="text-base font-medium text-[var(--text-primary)]">Theme</span>
+                Login
+              </Link>
+              <Link
+                to="/signup"
+                className="text-sm font-semibold bg-white text-black px-5 py-2.5 rounded-full hover:bg-neutral-200 transition-colors"
+              >
+                Get Started
+              </Link>
+
+              {/* Mobile Menu Toggle */}
               <button
-                onClick={toggleTheme}
-                className="p-2 rounded-full bg-[var(--bg-card)] border border-[var(--border-color)]"
+                className="md:hidden p-1.5 text-[var(--text-primary)]"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               >
-                {theme === 'dark' ? <Sun className="w-5 h-5 text-[var(--text-primary)]" /> : <Moon className="w-5 h-5 text-[var(--text-primary)]" />}
+                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
-            <Link
-              to="/login"
-              className="w-full text-center py-3 text-base font-medium text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg mt-2"
-            >
-              Login
-            </Link>
-            <Link
-              to="/signup"
-              className="w-full text-center py-3 text-base font-medium bg-[var(--text-primary)] text-[var(--bg-primary)] rounded-lg"
-            >
-              Get Started
-            </Link>
           </div>
-        </motion.div>
-      )}
+        </div>
+
+        {/* Mobile Menu — floating panel below the pill */}
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="md:hidden mt-2 rounded-2xl border border-white/10 bg-[#0a0a0b]/70 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08),0_20px_40px_-12px_rgba(0,0,0,0.6)]"
+          >
+            <div className="px-4 py-4 flex flex-col gap-1">
+              {navLinks.map((link) => (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  className="py-2.5 text-base font-medium text-neutral-300 hover:text-white transition-colors"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {link.name}
+                </a>
+              ))}
+              <div className="h-px bg-[var(--border-color)] my-2" />
+              <Link
+                to="/login"
+                className="py-2.5 text-base font-medium text-neutral-300 hover:text-white transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Login
+              </Link>
+            </div>
+          </motion.div>
+        )}
+      </div>
     </header>
   );
 }

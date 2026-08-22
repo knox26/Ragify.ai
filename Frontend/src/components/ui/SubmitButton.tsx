@@ -19,8 +19,8 @@ export function SubmitButton({
       type="submit"
       disabled={disabled || isLoading}
       className={cn(
-        "w-full font-semibold rounded-xl py-3 mt-6 transition-all flex items-center justify-center gap-2 group",
-        "bg-[var(--text-primary)] text-[var(--bg-primary)]",
+        "w-full font-semibold rounded-lg py-3.5 mt-6 transition-all flex items-center justify-center gap-2 group",
+        "bg-[var(--accent)] text-white shadow-lg shadow-[var(--accent-glow)]",
         isLoading && "opacity-70 cursor-not-allowed",
         !isLoading && "hover:opacity-90",
         className,

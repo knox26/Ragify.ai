@@ -31,7 +31,7 @@ export function DocumentCard({ fileName, status, createdAt }: Document) {
             justify-center
           "
         >
-          <FileText size={18} />
+          <FileText size={18} className="text-[var(--accent)]" />
         </div>
 
         <h3

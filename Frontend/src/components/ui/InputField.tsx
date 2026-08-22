@@ -33,7 +33,7 @@ export function InputField({
       </div>
       <div className="relative">
         {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-secondary)] pointer-events-none">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-secondary)] pointer-events-none">
             {icon}
           </div>
         )}
@@ -42,11 +42,13 @@ export function InputField({
           aria-invalid={!!error}
           aria-describedby={error ? `${inputId}-error` : undefined}
           className={cn(
-            "w-full bg-[var(--bg-card)] border rounded-xl py-3 pl-10 pr-4 text-sm outline-none transition-colors text-[var(--text-primary)]",
-            "focus:border-[var(--accent)]",
+            "w-full bg-white/5 border rounded-lg py-3 pl-12 pr-5 text-sm outline-none transition-colors text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]",
+            // No outline, no focus ring, no border color shift — focus is a
+            // subtle background lift so the field reads as "active" quietly.
+            "focus:outline-none focus:bg-white/10",
             error
-              ? "border-red-500 focus:border-red-500"
-              : "border-[var(--border-color)]",
+              ? "border-red-500"
+              : "border-white/10",
             className,
           )}
           {...inputProps}

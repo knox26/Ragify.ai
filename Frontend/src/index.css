@@ -1,54 +1,170 @@
 @import "tailwindcss";
 
 @theme {
-  --color-blue-600: #2563eb;
-  --color-cyan-400: #22d3ee;
+  /* Clean sans display (Automat-style) + monospace utility voice */
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", "Fragment Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 @layer base {
+  /* Inside the layer so utilities like `outline-none` can suppress it.
+     Un-layered it beat every utility class and doubled up focus rings. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
   :root {
-    /* Light mode — bold, modern, distinct surfaces */
-    --bg-primary: #f8f8fa;       /* Cool off-white — distinct from cards */
-    --bg-card: #e8e8eb;       /* Pure white — cards pop from page */
-    --bg-section: #f0f0f3;       /* Slightly deeper alt background */
-    --border-color: #e4e4e7; 
-    --border-color-productShowCase:#d4d4d8;   /* zinc-200 — clean, light borders */
-    --border-subtle: #eeeeef;    /* Near-invisible inner dividers */
-    --text-primary: #18181b;     /* zinc-900 — rich but not harsh black */
-    --text-secondary: #71717a;   /* zinc-500 — clear secondary hierarchy */
-    --accent: #7c3aed;           /* violet-600 — distinctive, modern personality */
-    --accent-soft: #f5f3ff;      /* violet-50 — subtle icon backgrounds */
+    /* Light mode — cool near-white paper, electric blue brand */
+    --bg-primary: #f7f7f8;
+    --bg-card: #ffffff;
+    --bg-section: #f0f0f2;
+    --border-color: #e4e4e7;
+    --border-color-productShowCase: #d4d4d8;
+    --border-subtle: #ededf0;
+    --text-primary: #18181c;
+    --text-secondary: #6d6d77;
+    --accent: #006edb;           /* electric blue — primary brand */
+    --accent-2: #d9006c;         /* hot magenta — signature highlight */
+    --accent-soft: #e6f0ff;
+    --accent-glow: 0 4px 14px -4px rgba(0, 110, 219, 0.45), 0 1px 3px -1px rgba(0, 110, 219, 0.35);
     --card-shadow: 0 0 0 1px rgba(0,0,0,0.03), 0 2px 4px rgba(0,0,0,0.04);
     --card-hover-shadow: 0 0 0 1px rgba(0,0,0,0.03), 0 12px 24px -4px rgba(0,0,0,0.08);
   }
 
   .dark {
-    --bg-primary: #09090b;       /* zinc-950 */
-    --bg-card: #18181b;          /* zinc-900 */
-    --bg-section: #111113;       /* slightly lighter than zinc-950 */
-    --border-color: #27272a;     /* zinc-800 */
-    --border-color-productShowCase:#27272a; 
-    --border-subtle: #3f3f46;    /* zinc-700 */
-    --text-primary: #f8fafc;     /* slate-50 */
-    --text-secondary: #94a3b8;   /* slate-400 */
-    --accent: #22d3ee;           /* cyan-400 */
-    --accent-soft: #083344;      /* dark cyan tint */
+    /* Dark mode — near-black, brighter blue + magenta accents */
+    --bg-primary: #0a0a0d;
+    --bg-card: #141418;
+    --bg-section: #101013;
+    --border-color: #26262c;
+    --border-color-productShowCase: #26262c;
+    --border-subtle: #34343c;
+    --text-primary: #f4f4f6;
+    --text-secondary: #9b9ba6;
+    --accent: #4f9cff;
+    --accent-2: #ff3d85;
+    --accent-soft: #10223f;
+    --accent-glow: 0 4px 14px -4px rgba(79, 156, 255, 0.45), 0 1px 3px -1px rgba(79, 156, 255, 0.35);
     --card-shadow: 0 1px 3px 0 rgba(0,0,0,0.4), 0 4px 12px 0 rgba(0,0,0,0.3);
-    --card-hover-shadow: 0 4px 20px 0 rgba(34,211,238,0.15), 0 1px 4px 0 rgba(0,0,0,0.4);
+    --card-hover-shadow: 0 4px 20px 0 rgba(79, 156, 255, 0.15), 0 1px 4px 0 rgba(0,0,0,0.4);
   }
+
+  /* Landing is always dark — a deliberate "data command" statement,
+     Automat-style. Independent of the app's theme toggle. */
+  .landing {
+    /* Carry the dark text color so descendants that inherit `color` (e.g.
+       `fill="currentColor"` icons) resolve to white, not body's light-mode
+       var(--text-primary). */
+    color: var(--text-primary);
+    --bg-primary: #0a0a0b;
+    --bg-card: #141416;
+    --bg-section: #101013;
+    --border-color: #26262b;
+    --border-color-productShowCase: #2e2e34;
+    --border-subtle: #33333a;
+    --text-primary: #f4f4f5;
+    --text-secondary: #8a8a93;
+    --accent: #4f9cff;
+    --accent-2: #ff3d85;
+    --accent-soft: #14213a;
+    --accent-glow: 0 4px 14px -4px rgba(79, 156, 255, 0.5), 0 1px 3px -1px rgba(79, 156, 255, 0.4);
+    --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.35);
+    --card-hover-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 12px 28px -6px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Landing scoped overrides for the hardcoded-effect classes */
+  .landing .glass {
+    background: rgba(16, 16, 19, 0.82);
+    border: 1px solid rgba(38, 38, 43, 0.7);
+  }
+  .landing .gradient-text {
+    background-image: linear-gradient(135deg, #4f9cff 0%, #ff3d85 100%);
+  }
+  .landing .glow {
+    box-shadow: 0 0 40px rgba(79, 156, 255, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+  .landing .gradient-mesh {
+    background:
+      radial-gradient(ellipse 90% 65% at 15% 15%, rgba(79, 156, 255, 0.20) 0%, transparent 55%),
+      radial-gradient(ellipse 70% 55% at 85% 8%, rgba(255, 61, 133, 0.14) 0%, transparent 50%),
+      radial-gradient(ellipse 60% 50% at 50% 90%, rgba(79, 156, 255, 0.08) 0%, transparent 60%);
+  }
+  /* Hero — clearly visible blue gradient: strong top glow, blue wash fading
+     down, magenta accent off-right. Reads as a real gradient, not black. */
+  .landing .hero-mesh {
+    background:
+      linear-gradient(to bottom,
+        rgba(79, 156, 255, 0.13) 0%,
+        rgba(79, 156, 255, 0.05) 35%,
+        rgba(0, 0, 0, 0) 65%),
+      radial-gradient(ellipse 85% 55% at 50% 0%, rgba(79, 156, 255, 0.20) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 40% at 80% 30%, rgba(255, 61, 133, 0.11) 0%, transparent 55%);
+  }
+}
+
+html {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Headings carry the display face; body stays Inter for readability */
+h1, h2, h3 {
+  font-family: var(--font-display);
 }
 
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── Accessibility floor ─────────────────── */
+::selection {
+  background: var(--accent);
+  color: #fff;
 }
 
 /* ── Text hierarchy ──────────────────────────── */
 .text-secondary {
   color: var(--text-secondary);
 }
+
+/* Small caps section label — monospace, the technical voice */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+}
+
+/* ── Buttons ─────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  border-radius: 0.75rem;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.btn-primary:hover { opacity: 0.9; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.btn-ghost:hover { background-color: var(--bg-section); }
 
 /* ── Glassmorphism ───────────────────────────── */
 .glass {
@@ -60,8 +176,8 @@ body {
 }
 
 .dark .glass {
-  background: rgba(18, 18, 20, 0.82);
-  border: 1px solid rgba(39, 39, 42, 0.7);
+  background: rgba(16, 16, 20, 0.82);
+  border: 1px solid rgba(38, 38, 44, 0.7);
 }
 
 /* ── Cards ───────────────────────────────────── */
@@ -78,27 +194,26 @@ body {
 
 /* ── Glow effects ────────────────────────────── */
 .glow {
-  box-shadow: 
-    0 0 0 1px rgba(124, 58, 237, 0.15),
-    0 0 40px rgba(124, 58, 237, 0.18),
-    0 8px 32px rgba(124, 58, 237, 0.12),
-    0 2px 8px rgba(124, 58, 237, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(0, 110, 219, 0.15),
+    0 0 40px rgba(0, 110, 219, 0.16),
+    0 8px 32px rgba(0, 110, 219, 0.12),
+    0 2px 8px rgba(0, 110, 219, 0.08);
 }
 .dark .glow {
-  box-shadow: 0 0 30px rgba(34, 211, 238, 0.12), 0 0 0 1px rgba(39,39,42,0.8);
+  box-shadow: 0 0 30px rgba(79, 156, 255, 0.14), 0 0 0 1px rgba(38, 38, 44, 0.8);
 }
-
 
 /* ── Gradient text ───────────────────────────── */
 .gradient-text {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  background-image: linear-gradient(135deg, #006edb 0%, #3d8bff 100%);
 }
 
 .dark .gradient-text {
-  background-image: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
+  background-image: linear-gradient(135deg, #4f9cff 0%, #ff3d85 100%);
 }
 
 /* ── Section alternation ─────────────────────── */
@@ -111,23 +226,18 @@ body {
 /* ── Gradient mesh ───────────────────────────── */
 .gradient-mesh {
   background:
-    radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.09) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 40%),
-    radial-gradient(ellipse at 50% 80%, rgba(139, 92, 246, 0.04) 0%, transparent 35%);
+    radial-gradient(ellipse at 20% 40%, rgba(0, 110, 219, 0.10) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(61, 139, 255, 0.07) 0%, transparent 40%);
 }
 
 .dark .gradient-mesh {
   background:
-    radial-gradient(ellipse at 20% 50%, rgba(34, 211, 238, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(129, 140, 248, 0.08) 0%, transparent 40%);
+    radial-gradient(ellipse at 20% 40%, rgba(79, 156, 255, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(255, 61, 133, 0.08) 0%, transparent 40%);
 }
 
 /* ── Feature icon bg ─────────────────────────── */
 .icon-bg {
-  background-color: var(--accent-soft);
-}
-
-.dark .icon-bg {
   background-color: var(--accent-soft);
 }
 

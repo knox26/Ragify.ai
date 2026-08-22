@@ -11,17 +11,7 @@ export function UploadButton({ onClick }: UploadButtonProps) {
       className="
         h-12
         px-5
-        rounded-xl
-        bg-gradient-to-r
-        from-cyan-400
-        to-blue-600
-        text-white
-        font-medium
-        flex
-        items-center
-        gap-2
-        hover:opacity-90
-        transition
+        btn-primary
       "
     >
       <Upload size={18} />

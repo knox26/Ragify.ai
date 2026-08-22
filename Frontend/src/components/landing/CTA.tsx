@@ -1,40 +1,36 @@
 import { motion } from "framer-motion";
-import { ArrowRight, Calendar } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export function CTA() {
   return (
-    <section className="relative py-32 overflow-hidden bg-[var(--bg-primary)]">
-      {/* Background Gradients */}
-      <div className="absolute inset-0 gradient-mesh opacity-50 dark:opacity-30" />
+    <section className="relative py-28 lg:py-36 overflow-hidden">
+      <div className="absolute inset-0 gradient-mesh" />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+      <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.5 }}
         >
-          <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--text-primary)] mb-6">
-            Turn Documents Into <br className="hidden sm:block" />
-            <span className="gradient-text">Conversations</span>
+          <p className="eyebrow mb-4">Get started</p>
+          <h2 className="text-4xl md:text-6xl font-bold tracking-tight text-[var(--text-primary)] leading-[1.05] mb-6">
+            Stop searching.
+            <br />
+            Start <span className="gradient-text">asking.</span>
           </h2>
-
-          <p className="text-xl md:text-2xl text-[var(--text-secondary)] mb-10 max-w-2xl mx-auto">
-            Stop searching. Start understanding. Join thousands of users who are
-            already saving hours every week.
+          <p className="text-lg md:text-xl text-[var(--text-secondary)] max-w-xl mx-auto mb-10">
+            Upload your first document in under a minute. No credit card
+            required.
           </p>
-
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               to="/signup"
-              className="w-full sm:w-auto px-8 py-4 rounded-full bg-[var(--accent)] text-white font-semibold text-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-xl shadow-violet-500/25 hover:scale-105 transform duration-300"
+              className="w-full sm:w-auto px-8 py-4 rounded-full bg-[var(--accent)] text-white font-semibold text-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-[var(--accent-glow)]"
             >
-              Start Free <ArrowRight className="w-5 h-5" />
+              Start free <ArrowRight className="w-5 h-5" />
             </Link>
-            <button className="w-full sm:w-auto px-8 py-4 rounded-full bg-[var(--bg-card)] text-[var(--text-primary)] border border-[var(--border-color)] font-semibold text-lg hover:bg-[var(--bg-section)] transition-colors flex items-center justify-center gap-2 hover:scale-105 transform duration-300">
-              <Calendar className="w-5 h-5" /> Book Demo
-            </button>
           </div>
         </motion.div>
       </div>

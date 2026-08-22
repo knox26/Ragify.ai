@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react';
+import { RagifyMark } from '../ui/RagifyMark';
 
 const footerLinks = {
   Product: ['Features', 'Pricing', 'Use Cases', 'Changelog'],
@@ -16,7 +16,7 @@ export function Footer() {
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center">
-                <Search className="w-5 h-5 text-white" />
+                <RagifyMark className="w-5 h-5 text-white" tone="accent" />
               </div>
               <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Ragify</span>
             </div>

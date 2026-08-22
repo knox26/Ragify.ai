@@ -1,5 +1,6 @@
 import { FileText, Menu, Plus, Search, MessageSquare } from "lucide-react";
 import { Link } from "react-router-dom";
+import { RagifyMark } from "../ui/RagifyMark";
 
 const chats = [
   "Revenue Analysis",
@@ -15,21 +16,21 @@ export function Sidebar() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-[var(--border-color)]">
         <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-cyan-400 flex items-center justify-center">
-            <Search size={18} className="text-black" />
+          <div className="h-9 w-9 rounded-xl bg-[var(--accent)] flex items-center justify-center">
+            <RagifyMark className="w-[18px] h-[18px] text-white" tone="accent" />
           </div>
 
-          <span className="font-semibold text-lg">Ragify</span>
+          <span className="font-semibold text-lg font-display">Ragify</span>
         </div>
 
-        <button className="p-2 hover:bg-zinc-800 rounded-lg">
+        <button className="p-2 hover:bg-[var(--bg-section)] rounded-lg">
           <Menu size={18} />
         </button>
       </div>
 
       {/* New Chat */}
       <div className="p-4">
-        <button className="w-full h-12 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-600 text-white font-medium flex items-center justify-center gap-2">
+        <button className="w-full h-12 btn-primary">
           <Plus size={18} />
           New Chat
         </button>
@@ -100,7 +101,7 @@ export function Sidebar() {
       {/* User */}
       <div className="border-t border-[var(--border-color)] p-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white">
+          <div className="h-10 w-10 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
             K
           </div>
 
