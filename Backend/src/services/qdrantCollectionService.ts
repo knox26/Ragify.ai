@@ -384,3 +384,18 @@ export async function deleteStaleChunks(
     );
   }
 }
+
+/**
+ * Ensure the payload index that range filters need.
+ *
+ * Qdrant requires a payload index for RANGE filters (match filters can
+ * full-scan). Without an index on chunkIndex, deleteStaleChunks fails with
+ * "Index required but not found". Recreating an existing index is a no-op,
+ * so this is safe to call at every worker boot.
+ */
+export async function ensurePayloadIndexes(): Promise<void> {
+  await qdrantClient.createPayloadIndex(collectionName, {
+    field_name: "chunkIndex",
+    field_schema: "integer",
+  });
+}

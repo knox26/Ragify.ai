@@ -67,9 +67,13 @@ export async function generateEmbeddings({
     const batch = normalizedTexts.slice(start, start + EMBEDDING_BATCH_SIZE);
 
     try {
+      // Must be Content[] with one text part per entry. Passing a plain
+      // string[] makes the SDK collapse the whole batch into a single
+      // content, so Gemini returns ONE embedding for N texts and the count
+      // check below throws.
       const response = await ai.models.embedContent({
         model: EMBEDDING_MODEL,
-        contents: batch,
+        contents: batch.map((text) => ({ parts: [{ text }] })),
         config: {
           taskType,
           outputDimensionality: EMBEDDING_DIMENSION,

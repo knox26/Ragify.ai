@@ -101,10 +101,6 @@ export async function processDocument(
         },
       });
 
-      console.log(
-        `Processed document ${documentId}: 0 chunks, existing vectors left untouched`,
-      );
-
       return;
     }
 
@@ -134,10 +130,6 @@ export async function processDocument(
         `Embedding count mismatch: expected ${processedChunks.length}, received ${embeddings.length}`,
       );
     }
-
-    console.log(
-      `Generated ${embeddings.length} embeddings for document ${documentId}`,
-    );
 
     const qdrantPoints = processedChunks.map((chunk, index) => {
       const embedding = embeddings[index];
@@ -178,10 +170,22 @@ export async function processDocument(
       },
     });
 
-    console.log(
-      `Processed document ${documentId}: ${processedChunks.length} chunks`,
-    );
   } catch (error) {
+    // Unwrap the error chain — pipeline stages wrap failures (e.g.
+    // embeddingService wraps the raw Gemini error in a batch message), so
+    // log message + cause together or the real reason stays hidden.
+    const unwrapped =
+      error instanceof Error
+        ? error.cause instanceof Error
+          ? `${error.message} — cause: ${error.cause.message}`
+          : error.message
+        : String(error);
+
+    console.error(
+      `[ingest] worker ${documentId}: FAILED (attempt ${job.attemptsMade + 1}/${job.opts.attempts ?? 1})`,
+      unwrapped,
+    );
+
     await prisma.document.update({
       where: {
         id: documentId,

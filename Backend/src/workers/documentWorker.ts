@@ -2,6 +2,14 @@ import { Worker } from "bullmq";
 import { redis } from "../libs/redis";
 import { QUEUE_NAMES } from "../queues/queueConstants";
 import { processDocument } from "./processDocument";
+import { ensurePayloadIndexes } from "../services/qdrantCollectionService";
+
+// Qdrant range filters (deleteStaleChunks) require a payload index on
+// chunkIndex. Ensure it at boot — idempotent, non-fatal if Qdrant is down
+// (stale-delete still surfaces its own error later).
+ensurePayloadIndexes().catch((error) => {
+  console.warn("[worker] could not ensure Qdrant payload indexes", error);
+});
 
 const worker = new Worker(QUEUE_NAMES.DOCUMENT_PROCESSING, processDocument, {
   connection: redis,
