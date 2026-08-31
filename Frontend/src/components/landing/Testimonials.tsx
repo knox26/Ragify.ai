@@ -48,7 +48,7 @@ export function Testimonials() {
             >
               <div className="flex gap-0.5 mb-6">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <Star key={star} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  <Star key={star} className="w-4 h-4 fill-[var(--accent-2)] text-[var(--accent-2)]" />
                 ))}
               </div>
               <p className="text-[var(--text-primary)] leading-relaxed mb-8 flex-1">

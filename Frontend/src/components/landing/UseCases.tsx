@@ -49,7 +49,7 @@ const useCases = [
 
 export function UseCases() {
   return (
-    <section className="py-24 lg:py-32">
+    <section id="use-cases" className="py-24 lg:py-32">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mb-16">
           <p className="eyebrow mb-4" style={{ color: "var(--accent)" }}>

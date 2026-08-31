@@ -68,11 +68,8 @@ export function Features() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: index * 0.05 }}
-                className="group border-b border-[var(--border-color)] py-7 flex items-start gap-6"
+                className="group border-b border-[var(--border-color)] py-7 flex items-start gap-6 pl-1"
               >
-                <span className="text-sm font-mono text-[var(--text-secondary)] pt-1 w-8 shrink-0">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
                 <div className="flex-1">
                   <h3 className="text-xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
                     {feature.title}

@@ -44,13 +44,15 @@ export function Hero() {
         >
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-card)] font-mono text-xs uppercase tracking-widest text-[var(--text-secondary)] mb-8">
             <Sparkles className="w-4 h-4 text-[var(--accent)]" />
-            Document intelligence, grounded in your files
+            Grounded in your files
           </div>
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-[var(--text-primary)] leading-[1.05]">
-            Ask your documents
-            <br />
-            <span className="gradient-text">anything.</span>
+            <span className="gradient-text">
+              Ask your documents
+              <br />
+              anything.
+            </span>
           </h1>
 
           <p className="mt-6 text-lg lg:text-xl text-[var(--text-secondary)] max-w-2xl mx-auto">

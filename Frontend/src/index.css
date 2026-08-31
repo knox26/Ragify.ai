@@ -15,48 +15,9 @@
   }
 
   :root {
-    /* Light mode — cool near-white paper, electric blue brand */
-    --bg-primary: #f7f7f8;
-    --bg-card: #ffffff;
-    --bg-section: #f0f0f2;
-    --border-color: #e4e4e7;
-    --border-color-productShowCase: #d4d4d8;
-    --border-subtle: #ededf0;
-    --text-primary: #18181c;
-    --text-secondary: #6d6d77;
-    --accent: #006edb;           /* electric blue — primary brand */
-    --accent-2: #d9006c;         /* hot magenta — signature highlight */
-    --accent-soft: #e6f0ff;
-    --accent-glow: 0 4px 14px -4px rgba(0, 110, 219, 0.45), 0 1px 3px -1px rgba(0, 110, 219, 0.35);
-    --card-shadow: 0 0 0 1px rgba(0,0,0,0.03), 0 2px 4px rgba(0,0,0,0.04);
-    --card-hover-shadow: 0 0 0 1px rgba(0,0,0,0.03), 0 12px 24px -4px rgba(0,0,0,0.08);
-  }
-
-  .dark {
-    /* Dark mode — near-black, brighter blue + magenta accents */
-    --bg-primary: #0a0a0d;
-    --bg-card: #141418;
-    --bg-section: #101013;
-    --border-color: #26262c;
-    --border-color-productShowCase: #26262c;
-    --border-subtle: #34343c;
-    --text-primary: #f4f4f6;
-    --text-secondary: #9b9ba6;
-    --accent: #4f9cff;
-    --accent-2: #ff3d85;
-    --accent-soft: #10223f;
-    --accent-glow: 0 4px 14px -4px rgba(79, 156, 255, 0.45), 0 1px 3px -1px rgba(79, 156, 255, 0.35);
-    --card-shadow: 0 1px 3px 0 rgba(0,0,0,0.4), 0 4px 12px 0 rgba(0,0,0,0.3);
-    --card-hover-shadow: 0 4px 20px 0 rgba(79, 156, 255, 0.15), 0 1px 4px 0 rgba(0,0,0,0.4);
-  }
-
-  /* Landing is always dark — a deliberate "data command" statement,
-     Automat-style. Independent of the app's theme toggle. */
-  .landing {
-    /* Carry the dark text color so descendants that inherit `color` (e.g.
-       `fill="currentColor"` icons) resolve to white, not body's light-mode
-       var(--text-primary). */
-    color: var(--text-primary);
+    /* Always-dark palette — the Automat-style "data command" look. The whole
+       app renders dark; there is no theme toggle. Values promoted from the old
+       `.landing` / `.dark` blocks when the toggle machinery was removed. */
     --bg-primary: #0a0a0b;
     --bg-card: #141416;
     --bg-section: #101013;
@@ -72,32 +33,10 @@
     --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.35);
     --card-hover-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 12px 28px -6px rgba(0, 0, 0, 0.5);
   }
-
-  /* Landing scoped overrides for the hardcoded-effect classes */
-  .landing .glass {
-    background: rgba(16, 16, 19, 0.82);
-    border: 1px solid rgba(38, 38, 43, 0.7);
-  }
-  .landing .gradient-text {
-    background-image: linear-gradient(135deg, #4f9cff 0%, #ff3d85 100%);
-  }
-  .landing .glow {
-    box-shadow: 0 0 40px rgba(79, 156, 255, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  }
-  .landing .gradient-mesh {
-    background:
-      radial-gradient(ellipse 90% 65% at 15% 15%, rgba(79, 156, 255, 0.20) 0%, transparent 55%),
-      radial-gradient(ellipse 70% 55% at 85% 8%, rgba(255, 61, 133, 0.14) 0%, transparent 50%),
-      radial-gradient(ellipse 60% 50% at 50% 90%, rgba(79, 156, 255, 0.08) 0%, transparent 60%);
-  }
-  /* Hero — clearly visible blue gradient: strong top glow, blue wash fading
-     down, magenta accent off-right. Reads as a real gradient, not black. */
+  /* Hero background: only the ambient color blobs. Blue wash over the top,
+     magenta to the right. Grid, downward wash, and fade mask removed. */
   .landing .hero-mesh {
     background:
-      linear-gradient(to bottom,
-        rgba(79, 156, 255, 0.13) 0%,
-        rgba(79, 156, 255, 0.05) 35%,
-        rgba(0, 0, 0, 0) 65%),
       radial-gradient(ellipse 85% 55% at 50% 0%, rgba(79, 156, 255, 0.20) 0%, transparent 55%),
       radial-gradient(ellipse 50% 40% at 80% 30%, rgba(255, 61, 133, 0.11) 0%, transparent 55%);
   }
@@ -168,16 +107,11 @@ body {
 
 /* ── Glassmorphism ───────────────────────────── */
 .glass {
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(16, 16, 19, 0.82);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-}
-
-.dark .glass {
-  background: rgba(16, 16, 20, 0.82);
-  border: 1px solid rgba(38, 38, 44, 0.7);
+  border: 1px solid rgba(38, 38, 43, 0.7);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 }
 
 /* ── Cards ───────────────────────────────────── */
@@ -194,14 +128,7 @@ body {
 
 /* ── Glow effects ────────────────────────────── */
 .glow {
-  box-shadow:
-    0 0 0 1px rgba(0, 110, 219, 0.15),
-    0 0 40px rgba(0, 110, 219, 0.16),
-    0 8px 32px rgba(0, 110, 219, 0.12),
-    0 2px 8px rgba(0, 110, 219, 0.08);
-}
-.dark .glow {
-  box-shadow: 0 0 30px rgba(79, 156, 255, 0.14), 0 0 0 1px rgba(38, 38, 44, 0.8);
+  box-shadow: 0 0 40px rgba(79, 156, 255, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 /* ── Gradient text ───────────────────────────── */
@@ -209,11 +136,29 @@ body {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(135deg, #006edb 0%, #3d8bff 100%);
+  /* Metal shimmer on a bright silver base: a dark sliver then white glint
+     sweeps across. The shadow-trail right behind the highlight makes the
+     motion read clearly without ever darkening the whole text. Base stays
+     bright silver. Reduced-motion block below freezes it. */
+  background-image: linear-gradient(110deg, #d8d8e0 0%, #e6e6ec 35%, #a2a2ab 43%, #ffffff 48%, #cfcfd7 53%, #e6e6ec 62%, #d8d8e0 100%);
+  background-size: 200% 100%;
+  animation: metal-sweep 3.5s linear infinite;
 }
 
-.dark .gradient-text {
-  background-image: linear-gradient(135deg, #4f9cff 0%, #ff3d85 100%);
+@keyframes metal-sweep {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Same silver theme, static — no sweep. Metal reads from the contrast
+   between dark-grey sheen stops and sharp white highlights; all-bright
+   greys collapse to flat white. Dark stops are mid-silver, not near-black,
+   so they shade without going muddy on #0a0a0b. */
+.gradient-text-static {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(115deg, #ffffff 0%, #e8e8ee 18%, #9898a4 42%, #cfcfd8 52%, #ffffff 62%, #dcdce3 78%, #8f8f9b 100%);
 }
 
 /* ── Section alternation ─────────────────────── */
@@ -225,15 +170,9 @@ body {
 
 /* ── Gradient mesh ───────────────────────────── */
 .gradient-mesh {
-  background:
-    radial-gradient(ellipse at 20% 40%, rgba(0, 110, 219, 0.10) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(61, 139, 255, 0.07) 0%, transparent 40%);
-}
-
-.dark .gradient-mesh {
-  background:
-    radial-gradient(ellipse at 20% 40%, rgba(79, 156, 255, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(255, 61, 133, 0.08) 0%, transparent 40%);
+  /* Closing-section backdrop: a flat single-hue magenta wash rising from the
+     bottom edge. Reads like the footer of the printed page, not a lava lamp. */
+  background: linear-gradient(to top, rgba(255, 61, 133, 0.08) 0%, transparent 45%);
 }
 
 /* ── Feature icon bg ─────────────────────────── */
@@ -241,7 +180,71 @@ body {
   background-color: var(--accent-soft);
 }
 
+/* ── Markdown answer typography ─────────────── */
+.markdown-answer > *:first-child { margin-top: 0; }
+.markdown-answer > *:last-child { margin-bottom: 0; }
+.markdown-answer p { margin: 0.6em 0; }
+.markdown-answer h1,
+.markdown-answer h2,
+.markdown-answer h3 { margin: 1.2em 0 0.5em; font-weight: 700; letter-spacing: -0.01em; }
+.markdown-answer h1 { font-size: 1.35em; }
+.markdown-answer h2 { font-size: 1.2em; }
+.markdown-answer h3 { font-size: 1.05em; }
+.markdown-answer ul,
+.markdown-answer ol { margin: 0.6em 0; padding-left: 1.4em; }
+.markdown-answer li { margin: 0.25em 0; }
+.markdown-answer strong { color: var(--text-primary); font-weight: 600; }
+.markdown-answer code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+  background: var(--bg-section);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.1em 0.35em;
+}
+.markdown-answer pre {
+  margin: 0.8em 0;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+  background: var(--bg-section);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.markdown-answer pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+.markdown-answer blockquote {
+  margin: 0.8em 0;
+  padding-left: 1em;
+  border-left: 2px solid var(--accent-2);
+  color: var(--text-secondary);
+}
+.markdown-answer a { color: var(--accent); text-decoration: underline; }
+.markdown-answer table { border-collapse: collapse; margin: 0.8em 0; }
+.markdown-answer th,
+.markdown-answer td {
+  border: 1px solid var(--border-color);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+
 /* ── Scrollbar ───────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+/* ── Reduced motion ────────────────────────────
+   Honor prefers-reduced-motion: kill CSS animations/transitions
+   (animate-pulse dot, button hover shifts, theme fade). framer-motion
+   transforms are handled by MotionConfig reducedMotion="user". */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

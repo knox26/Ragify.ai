@@ -91,14 +91,6 @@ export function LoginPage() {
           placeholder="••••••••"
           icon={<Lock className="w-5 h-5" />}
           error={errors.password?.message}
-          labelAction={
-            <a
-              href="#"
-              className="text-xs font-medium text-[var(--accent)] hover:underline"
-            >
-              Forgot password?
-            </a>
-          }
           {...register("password")}
         />
 

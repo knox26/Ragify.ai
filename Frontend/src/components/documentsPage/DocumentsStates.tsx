@@ -10,18 +10,30 @@ export function DocumentsErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="card p-10 flex flex-col items-center text-center">
-      <div className="h-14 w-14 rounded-2xl icon-bg flex items-center justify-center mb-4">
-        <AlertTriangle size={24} className="text-[var(--accent-2)]" />
+    <div className="relative overflow-hidden card p-12 flex flex-col items-center text-center">
+      <div className="absolute inset-0 gradient-mesh opacity-60" aria-hidden="true" />
+
+      <div className="relative flex flex-col items-center">
+        <div className="h-14 w-14 rounded-2xl bg-[var(--accent-2)]/10 border border-[var(--accent-2)]/20 flex items-center justify-center mb-5">
+          <AlertTriangle size={24} className="text-[var(--accent-2)]" />
+        </div>
+
+        <p className="text-xs eyebrow mb-3" style={{ color: "var(--accent)" }}>
+          Connection error
+        </p>
+        <h3 className="text-xl font-semibold mb-2 text-[var(--text-primary)]">
+          Couldn't load documents
+        </h3>
+
+        <p className="text-sm text-[var(--text-secondary)] max-w-md mb-7">{message}</p>
+
+        <button
+          onClick={onRetry}
+          className="cursor-pointer h-10 px-5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-section)] transition-colors"
+        >
+          Try again
+        </button>
       </div>
-
-      <h3 className="text-lg font-semibold mb-1">Couldn't load documents</h3>
-
-      <p className="text-secondary max-w-md mb-6">{message}</p>
-
-      <button onClick={onRetry} className="h-10 px-4 btn-ghost">
-        Try again
-      </button>
     </div>
   );
 }
@@ -36,36 +48,62 @@ type DocumentsEmptyStateProps =
 export function DocumentsEmptyState(props: DocumentsEmptyStateProps) {
   if (props.kind === "no-results") {
     return (
-      <div className="card p-10 flex flex-col items-center text-center">
-        <div className="h-14 w-14 rounded-2xl icon-bg flex items-center justify-center mb-4">
-          <Search size={24} className="text-[var(--accent)]" />
+      <div className="relative overflow-hidden card p-12 flex flex-col items-center text-center">
+        <div className="absolute inset-0 gradient-mesh opacity-40" aria-hidden="true" />
+
+        <div className="relative flex flex-col items-center">
+          <div className="h-14 w-14 rounded-2xl bg-[var(--accent-soft)] flex items-center justify-center mb-5">
+            <Search size={24} className="text-[var(--accent)]" />
+          </div>
+
+          <p className="text-xs eyebrow mb-3" style={{ color: "var(--accent)" }}>
+            No results
+          </p>
+          <h3 className="text-xl font-semibold mb-2 text-[var(--text-primary)]">
+            No matching documents
+          </h3>
+
+          <p className="text-sm text-[var(--text-secondary)] max-w-md">
+            Nothing matches{" "}
+            <span className="font-mono text-[var(--text-primary)]">
+              “{props.query}”
+            </span>
+            . Try a different search.
+          </p>
         </div>
-
-        <h3 className="text-lg font-semibold mb-1">No matching documents</h3>
-
-        <p className="text-secondary max-w-md">
-          Nothing matches &ldquo;{props.query}&rdquo;. Try a different search.
-        </p>
       </div>
     );
   }
 
   return (
-    <div className="card p-10 flex flex-col items-center text-center">
-      <div className="h-14 w-14 rounded-2xl icon-bg flex items-center justify-center mb-4">
-        <FileText size={24} className="text-[var(--accent)]" />
+    <div className="relative overflow-hidden card p-12 flex flex-col items-center text-center">
+      <div className="absolute inset-0 gradient-mesh" aria-hidden="true" />
+
+      <div className="relative flex flex-col items-center">
+        <div className="h-14 w-14 rounded-2xl bg-[var(--accent-soft)] flex items-center justify-center mb-5">
+          <FileText size={24} className="text-[var(--accent)]" />
+        </div>
+
+        <p className="text-xs eyebrow mb-3" style={{ color: "var(--accent)" }}>
+          Knowledge base
+        </p>
+        <h3 className="text-xl font-semibold mb-2 text-[var(--text-primary)]">
+          No documents yet
+        </h3>
+
+        <p className="text-sm text-[var(--text-secondary)] max-w-md mb-7">
+          Upload your first document to start building a searchable knowledge
+          base.
+        </p>
+
+        <button
+          onClick={props.onUpload}
+          className="cursor-pointer h-11 px-6 rounded-xl bg-[var(--accent)] text-white font-semibold inline-flex items-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-[var(--accent-glow)]"
+        >
+          <Upload size={18} />
+          Upload your first document
+        </button>
       </div>
-
-      <h3 className="text-lg font-semibold mb-1">No documents yet</h3>
-
-      <p className="text-secondary max-w-md mb-6">
-        Upload your first document to start building a searchable knowledge base.
-      </p>
-
-      <button onClick={props.onUpload} className="h-11 px-5 btn-primary">
-        <Upload size={18} />
-        Upload your first document
-      </button>
     </div>
   );
 }

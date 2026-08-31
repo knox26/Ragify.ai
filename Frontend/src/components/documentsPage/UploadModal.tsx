@@ -157,6 +157,12 @@ export function UploadModal({
 
         completedParts += uploadResult.uploadedChunks.length;
 
+        // Accumulate the newly-uploaded parts. On a URL-refresh cycle only the
+        // failed parts are re-uploaded, so this pushes only the fresh ones —
+        // otherwise the outer array would stay empty and completeUpload would
+        // 400 with "At least one uploaded chunk is required".
+        uploadedChunks.push(...uploadResult.uploadedChunks);
+
         if (uploadResult.aborted) {
           // Defensive: today only handleCancelUpload can abort, and it bumps
           // the generation first, so the isCurrent() check above bails before
@@ -292,7 +298,7 @@ export function UploadModal({
         fixed
         inset-0
         z-50
-        bg-black/50
+        bg-black/70
         backdrop-blur-sm
         flex
         items-center
@@ -300,21 +306,19 @@ export function UploadModal({
         p-4
       "
     >
-      <div
-        className="
-          card
-          w-full
-          max-w-2xl
-          p-6
-        "
-      >
+      <div className="card w-full max-w-2xl p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-start justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold">Upload Document</h2>
-
-            <p className="text-secondary mt-1">
-              Add a PDF, DOCX, TXT, or Markdown file to your knowledge base.
+            <p className="text-xs eyebrow mb-2" style={{ color: "var(--accent)" }}>
+              Upload
+            </p>
+            <h2 className="text-xl font-bold tracking-tight">
+              Add a document
+            </h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">
+              PDF, DOCX, TXT, or Markdown. It becomes searchable once indexing
+              completes.
             </p>
           </div>
 
@@ -322,6 +326,7 @@ export function UploadModal({
             onClick={onClose}
             disabled={isUploading}
             className="
+              cursor-pointer
               h-10
               w-10
               rounded-xl
@@ -330,8 +335,9 @@ export function UploadModal({
               items-center
               justify-center
               transition-colors
-              disabled:opacity-50
+              disabled:opacity-50 disabled:cursor-not-allowed
             "
+            aria-label="Close"
           >
             <X size={18} />
           </button>
@@ -364,7 +370,7 @@ export function UploadModal({
                   h-16
                   w-16
                   rounded-2xl
-                  icon-bg
+                  bg-[var(--accent-soft)]
                   flex
                   items-center
                   justify-center
@@ -389,10 +395,10 @@ export function UploadModal({
               </div>
 
               <h3 className="text-lg font-semibold mb-2">
-                {isUploading ? "Uploading document..." : "Upload your document"}
+                {isUploading ? "Uploading document…" : "Upload your document"}
               </h3>
 
-              <p className="text-secondary max-w-md">
+              <p className="text-sm text-[var(--text-secondary)] max-w-md">
                 {isUploading
                   ? "Please wait while we upload your file."
                   : "Drag and drop a file here, or click to browse"}
@@ -404,14 +410,16 @@ export function UploadModal({
                     <span
                       key={type}
                       className="
-                          px-3
-                          py-1
-                          rounded-full
-                          text-sm
-                          bg-[var(--bg-section)]
-                          border
-                          border-[var(--border-color)]
-                        "
+                        px-3
+                        py-1
+                        rounded-full
+                        text-xs
+                        font-mono
+                        text-[var(--text-secondary)]
+                        bg-[var(--bg-section)]
+                        border
+                        border-[var(--border-color)]
+                      "
                     >
                       {type}
                     </span>
@@ -441,13 +449,13 @@ export function UploadModal({
             </div>
 
             <div className="mt-2 flex items-center justify-between">
-              <span className="text-sm text-secondary">
+              <span className="text-sm text-[var(--text-secondary)] font-mono">
                 {progress ?? 0}% uploaded
               </span>
 
               <button
                 onClick={handleCancelUpload}
-                className="text-sm text-secondary hover:text-[var(--accent)] transition-colors"
+                className="cursor-pointer text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
               >
                 Cancel upload
               </button>
@@ -460,7 +468,7 @@ export function UploadModal({
         {error && (
           <p
             role="alert"
-            className="mt-4 text-sm font-medium text-red-500"
+            className="mt-4 text-sm font-medium text-red-400"
           >
             {error}
           </p>
@@ -475,13 +483,14 @@ export function UploadModal({
             border-[var(--border-color)]
             flex
             items-center
-            gap-3
-            text-sm
-            text-secondary
+            gap-2
+            text-xs
+            font-mono
+            text-[var(--text-secondary)]
           "
         >
-          <FileText size={16} />
-          Documents will be processed automatically and become searchable once
+          <FileText size={14} />
+          Documents are processed automatically and become searchable once
           indexing completes.
         </div>
       </div>

@@ -167,7 +167,7 @@ export function SocialButtons() {
     <div className="mt-6 grid grid-cols-2 gap-4">
       <button
         type="button"
-        className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+        className="cursor-pointer flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
       >
         <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
           <path
@@ -193,7 +193,7 @@ export function SocialButtons() {
       </button>
       <button
         type="button"
-        className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+        className="cursor-pointer flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
       >
         <svg
           className="w-5 h-5"

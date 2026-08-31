@@ -44,7 +44,7 @@ export function Navbar() {
             </Link>
 
             {/* Center nav — truly centered, muted → white hover */}
-            <nav className="hidden md:flex items-center gap-7 absolute left-1/2 -translate-x-1/2">
+            <nav className="hidden lg:flex items-center gap-7 absolute left-1/2 -translate-x-1/2">
               {navLinks.map((link) => (
                 <a
                   key={link.name}
@@ -60,7 +60,7 @@ export function Navbar() {
             <div className="flex items-center gap-3 shrink-0">
               <Link
                 to="/login"
-                className="hidden md:block text-sm font-medium text-neutral-300 hover:text-white transition-colors"
+                className="hidden lg:block text-sm font-medium text-neutral-300 hover:text-white transition-colors"
               >
                 Login
               </Link>
@@ -68,12 +68,12 @@ export function Navbar() {
                 to="/signup"
                 className="text-sm font-semibold bg-white text-black px-5 py-2.5 rounded-full hover:bg-neutral-200 transition-colors"
               >
-                Get Started
+                Start free
               </Link>
 
               {/* Mobile Menu Toggle */}
               <button
-                className="md:hidden p-1.5 text-[var(--text-primary)]"
+                className="md:hidden p-2.5 cursor-pointer text-[var(--text-primary)]"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               >
                 {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

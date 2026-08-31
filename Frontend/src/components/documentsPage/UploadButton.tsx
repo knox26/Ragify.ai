@@ -8,14 +8,10 @@ export function UploadButton({ onClick }: UploadButtonProps) {
   return (
     <button
       onClick={onClick}
-      className="
-        h-12
-        px-5
-        btn-primary
-      "
+      className="cursor-pointer h-11 px-5 rounded-xl bg-[var(--accent)] text-white font-semibold inline-flex items-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-[var(--accent-glow)]"
     >
-      <Upload size={18} />
-      Upload Document
+      <Upload size={16} />
+      Upload document
     </button>
   );
 }

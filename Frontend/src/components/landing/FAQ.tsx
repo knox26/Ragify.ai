@@ -45,7 +45,7 @@ export function FAQ() {
               className="border border-[var(--border-color)] bg-[var(--bg-card)] rounded-2xl overflow-hidden transition-colors hover:border-[var(--accent)]"
             >
               <button
-                className="w-full px-6 py-5 flex items-center justify-between text-left"
+                className="cursor-pointer w-full px-6 py-5 flex items-center justify-between text-left"
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
               >
                 <span className="font-semibold text-lg text-[var(--text-primary)]">
