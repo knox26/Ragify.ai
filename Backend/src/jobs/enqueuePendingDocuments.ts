@@ -23,6 +23,20 @@ export async function enqueuePendingDocuments(): Promise<number> {
   let enqueued = 0;
 
   for (const doc of docs) {
+    // Re-enqueue after a PREVIOUS run is blocked by BullMQ's jobId dedupe:
+    // the stale terminal job (completed/failed) still holds the id, so `add`
+    // silently no-ops, the status write below flips the doc to QUEUED, and it
+    // sits there forever — no job ever reaches the worker. A re-process (new
+    // chunker, retry after FAILED) must clear the stale job first. Never
+    // remove an in-flight job: a worker may be mid-claim right now.
+    const existing = await documentProcessorQueue.getJob(doc.id);
+    if (existing) {
+      const state = await existing.getState();
+      if (!["active", "waiting", "delayed"].includes(state)) {
+        await documentProcessorQueue.remove(doc.id);
+      }
+    }
+
     // Enqueue first, then mark QUEUED.
     //
     // If the worker picks the job up before status is QUEUED, its claim

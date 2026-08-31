@@ -311,20 +311,28 @@ describe("DOCX parsing integration", () => {
     });
 
     /*
-     * The current DOCX fixture produces exactly one chunk.
-     * Keep this explicit so a change in chunking behavior is detected.
+     * SentenceSplitter runs at chunkSize 400 tokens (~1600 chars). The resume
+     * fixture is ~2100 chars on one logical page, so it splits into 2 chunks —
+     * this exact count is intentional and will fail loudly if chunking
+     * behavior changes again.
      */
-    expect(chunks).toHaveLength(1);
+    expect(chunks).toHaveLength(2);
+
+    const combinedChunkText = chunks.map((chunk) => chunk.text).join("");
+
+    // Known content must survive the full DOCX -> chunk pipeline. It may be
+    // split across chunks (that is the point of chunking), so assert on the
+    // concatenated chunk text, not per-chunk.
+    expect(combinedChunkText).toContain("Jordan Ashworth");
+    expect(combinedChunkText).toContain("PROFESSIONAL SUMMARY");
+    expect(combinedChunkText).toContain("Senior Backend Engineer");
+    expect(combinedChunkText).toContain("Northwind Systems");
+    expect(combinedChunkText).toContain("Harborlight — Distributed Job Scheduler");
+    expect(combinedChunkText).toContain("Fernwatch — Uptime Monitoring Dashboard");
+    expect(combinedChunkText).toContain("EDUCATION");
 
     for (const chunk of chunks) {
       expect(chunk.text.length).toBeGreaterThan(0);
-
-      // Verify known content survived the complete pipeline.
-      expect(chunk.text).toContain("Jordan Ashworth");
-      expect(chunk.text).toContain("PROFESSIONAL SUMMARY");
-      expect(chunk.text).toContain("Senior Backend Engineer");
-      expect(chunk.text).toContain("Northwind Systems");
-      expect(chunk.text).toContain("Harborlight — Distributed Job Scheduler");
 
       // DOCX currently produces one logical page.
       expect(chunk.pageStart).toBe(1);

@@ -7,6 +7,13 @@ build/
 /src/generated/prisma
 .bun/
 
+# compiled JS twins — backend is TS-only (bun runs .ts directly). A bare
+# `tsc` emit leaves these next to their sources; use `tsc --noEmit` instead.
+src/**/*.js
+src/**/*.js.map
+*.tsbuildinfo
+prisma.config.js
+
 # env files
 .env
 .env.*
@@ -17,3 +24,6 @@ build/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# eval dataset (FinanceBench PDFs/JSONL — CC BY-NC, non-commercial; keep out of git)
+/.eval/

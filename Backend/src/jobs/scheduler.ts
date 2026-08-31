@@ -1,6 +1,9 @@
 import { enqueuePendingDocuments } from "./enqueuePendingDocuments";
+import { reconcileStaleUploads } from "./reconcileStaleUploads";
 
 const POLL_INTERVAL_MS = 2000;
+// Stale-upload sweep — coarse, it does not need the enqueue cadence.
+const RECONCILE_INTERVAL_MS = 15 * 60 * 1000; // 15m
 
 /**
  * Scheduler entrypoint — runs the background jobs on a loop.
@@ -23,7 +26,21 @@ async function loop(): Promise<void> {
   setTimeout(loop, POLL_INTERVAL_MS);
 }
 
+async function reconcileLoop(): Promise<void> {
+  try {
+    const count = await reconcileStaleUploads();
+    if (count > 0) {
+      console.log(`[scheduler] reconciled ${count} abandoned upload(s)`);
+    }
+  } catch (error) {
+    console.error("[scheduler] reconcile failed", error);
+  }
+
+  setTimeout(reconcileLoop, RECONCILE_INTERVAL_MS);
+}
+
 loop();
+reconcileLoop();
 
 // Let the process exit cleanly on shutdown signals.
 process.on("SIGTERM", () => process.exit(0));

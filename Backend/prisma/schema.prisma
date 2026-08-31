@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [pg_trgm]
 }
 
 enum UploadStatus {
@@ -24,6 +26,11 @@ enum DocumentFailureReason {
   PROCESSING_FAILED
 }
 
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
 // prisma/schema.prisma
 
 model User {
@@ -39,6 +46,7 @@ model User {
   // Relational Arrays
   refreshTokens RefreshToken[]
   documents     Document[]
+  chatSessions  ChatSession[]
 }
 
 model RefreshToken {
@@ -73,6 +81,37 @@ model Document {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
-  @@index([userId, createdAt])
+  @@index([userId, createdAt, id])
   @@index([status])
+  @@index([fileName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Document_fileName_trgm_idx")
+
+  chatSessions ChatSession[]
+}
+
+model ChatSession {
+  id         String        @id @default(uuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentId String? // null = global chat, set = doc-scoped
+  document   Document?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  title      String
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  messages   ChatMessage[]
+
+  @@index([userId, updatedAt, id])
+  @@index([documentId])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      ChatRole
+  content   String      @db.Text
+  sources   Json? // ChatSourcePayload[] — null when none
+  error     Boolean     @default(false) // true when assistant msg truncated by mid-stream failure
+  createdAt DateTime    @default(now())
+
+  @@index([sessionId, createdAt, id])
 }

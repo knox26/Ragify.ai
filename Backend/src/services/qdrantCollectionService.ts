@@ -1,5 +1,10 @@
 import { v5 as uuidv5 } from "uuid";
 import { qdrantClient } from "../db/qdrantClient";
+import {
+  SPARSE_VECTOR_NAME,
+  sparseVectorFor,
+  type SparseVector,
+} from "./sparseVectorService";
 
 const QDRANT_COLLECTION = Bun.env.QDRANT_COLLECTION;
 const EMBEDDING_DIMENSION = Number(Bun.env.EMBEDDING_DIMENSION);
@@ -62,24 +67,12 @@ export function buildChunkPointId(
 }
 
 /**
- * Lightweight chunk representation produced by
- * llamaDocumentService.ts.
- */
-export type ProcessedChunk = {
-  chunkIndex: number;
-  text: string;
-  startOffset: number;
-  endOffset: number;
-  pageStart: number;
-  pageEnd: number;
-};
-
-/**
  * Payload stored alongside every Qdrant vector.
  */
 export type QdrantChunkPayload = {
   documentId: string;
   userId: string;
+  fileName: string;
   chunkIndex: number;
   text: string;
   startOffset: number;
@@ -90,12 +83,73 @@ export type QdrantChunkPayload = {
 
 /**
  * Point that will be stored in Qdrant.
+ *
+ * Hybrid points carry two vectors in one payload:
+ *
+ *   vector[""]                 -> dense embedding (unnamed = default)
+ *   vector[SPARSE_VECTOR_NAME] -> sparse term vector
  */
 export type QdrantPoint = {
   id: string;
-  vector: number[];
+  vector:
+    | number[]
+    | {
+        "": number[];
+        [name: string]: number[] | SparseVector;
+      };
   payload: QdrantChunkPayload & Record<string, unknown>;
 };
+
+/**
+ * Ensure the collection exists WITH the sparse vector config hybrid retrieval
+ * needs. Sparse config is immutable once a collection is created, so an
+ * existing collection without it (pre-hybrid data) must be recreated — fail
+ * loudly rather than silently serving dense-only results.
+ */
+export async function ensureQdrantCollection(): Promise<void> {
+  let exists = false;
+
+  try {
+    await qdrantClient.getCollection(collectionName);
+    exists = true;
+  } catch (error) {
+    const status = (error as { status?: number })?.status;
+
+    if (status !== 404) {
+      throw new Error(
+        `Failed to check Qdrant collection "${collectionName}"`,
+        { cause: error },
+      );
+    }
+  }
+
+  if (!exists) {
+    await qdrantClient.createCollection(collectionName, {
+      vectors: { size: EMBEDDING_DIMENSION, distance: "Cosine" },
+      sparse_vectors: {
+        [SPARSE_VECTOR_NAME]: { modifier: "idf" },
+      },
+    });
+
+    console.log(
+      `Qdrant collection "${collectionName}" created ` +
+        `(dense ${EMBEDDING_DIMENSION}d + sparse "${SPARSE_VECTOR_NAME}")`,
+    );
+
+    return;
+  }
+
+  const info = await qdrantClient.getCollection(collectionName);
+  const sparse = info.config.params.sparse_vectors?.[SPARSE_VECTOR_NAME];
+
+  if (sparse?.modifier !== "idf") {
+    throw new Error(
+      `Qdrant collection "${collectionName}" exists without sparse vector ` +
+        `"${SPARSE_VECTOR_NAME}" (modifier idf). Hybrid search needs it — ` +
+        `recreate the collection and re-ingest.`,
+    );
+  }
+}
 
 /**
  * Verify that:
@@ -135,99 +189,19 @@ export async function verifyQdrantCollection(): Promise<void> {
     );
   }
 
-  console.log(
-    `Qdrant collection "${collectionName}" verified successfully (${configuredSize} dimensions)`,
-  );
-}
+  const sparse = collectionInfo.config.params.sparse_vectors?.[SPARSE_VECTOR_NAME];
 
-/**
- * Convert processed chunks + embeddings into Qdrant points
- * and store them.
- *
- * Mapping:
- *
- * chunks[0] + embeddings[0] -> point[0]
- * chunks[1] + embeddings[1] -> point[1]
- * ...
- *
- * The order between chunks and embeddings must therefore
- * remain unchanged.
- *
- * This function also guarantees that every embedding has
- * the expected dimension before sending it to Qdrant.
- */
-export async function indexDocumentInQdrant({
-  documentId,
-  userId,
-  chunks,
-  embeddings,
-}: {
-  documentId: string;
-  userId: string;
-  chunks: ProcessedChunk[];
-  embeddings: number[][];
-}): Promise<void> {
-  if (!documentId) {
-    throw new Error("documentId is required");
-  }
-
-  if (!userId) {
-    throw new Error("userId is required");
-  }
-
-  if (chunks.length === 0) {
-    return;
-  }
-
-  /**
-   * Every chunk must have exactly one corresponding embedding.
-   */
-  if (chunks.length !== embeddings.length) {
+  if (sparse?.modifier !== "idf") {
     throw new Error(
-      `Qdrant indexing mismatch for document "${documentId}": ` +
-        `received ${chunks.length} chunks but ${embeddings.length} embeddings`,
+      `Qdrant collection "${collectionName}" has no sparse vector ` +
+        `"${SPARSE_VECTOR_NAME}" (modifier idf) — recreate the collection and re-ingest.`,
     );
   }
 
-  const points: QdrantPoint[] = chunks.map((chunk, index) => {
-    const embedding = embeddings[index];
-
-    if (!embedding) {
-      throw new Error(
-        `Missing embedding for chunk ${chunk.chunkIndex} of document "${documentId}"`,
-      );
-    }
-
-    if (embedding.length !== EMBEDDING_DIMENSION) {
-      throw new Error(
-        `Invalid embedding dimension for chunk ${chunk.chunkIndex} ` +
-          `of document "${documentId}": expected ${EMBEDDING_DIMENSION}, ` +
-          `received ${embedding.length}`,
-      );
-    }
-
-    return {
-      /**
-       * Qdrant does not accept arbitrary strings such as:
-       *
-       * documentId:chunkIndex
-       *
-       * UUIDv5 converts that deterministic identity into
-       * a valid UUID accepted by Qdrant.
-       */
-      id: buildChunkPointId(documentId, chunk.chunkIndex),
-
-      vector: embedding,
-
-      payload: {
-        documentId,
-        userId,
-        ...chunk,
-      },
-    };
-  });
-
-  await upsertDocumentChunks(points);
+  console.log(
+    `Qdrant collection "${collectionName}" verified successfully ` +
+      `(${configuredSize} dimensions + sparse "${SPARSE_VECTOR_NAME}")`,
+  );
 }
 
 /**
@@ -386,16 +360,34 @@ export async function deleteStaleChunks(
 }
 
 /**
- * Ensure the payload index that range filters need.
+ * Ensure the payload indexes Qdrant filters require.
  *
- * Qdrant requires a payload index for RANGE filters (match filters can
- * full-scan). Without an index on chunkIndex, deleteStaleChunks fails with
- * "Index required but not found". Recreating an existing index is a no-op,
- * so this is safe to call at every worker boot.
+ * Qdrant needs an index on any key used in a RANGE filter, and — once any
+ * index exists — a filtered DELETE also requires indexed MATCH keys
+ * ("Index required but not found for documentId of [keyword, uuid]"). A
+ * freshly created (or recreated) collection starts with none, so index the
+ * three keys filters touch:
+ *
+ *   userId     — every retrieval match filter
+ *   documentId — every retrieval match filter + deleteStaleChunks
+ *   chunkIndex — deleteStaleChunks range filter
+ *
+ * Recreating an existing index is a no-op, so this is safe to call at every
+ * worker boot.
  */
 export async function ensurePayloadIndexes(): Promise<void> {
-  await qdrantClient.createPayloadIndex(collectionName, {
-    field_name: "chunkIndex",
-    field_schema: "integer",
-  });
+  await Promise.all([
+    qdrantClient.createPayloadIndex(collectionName, {
+      field_name: "userId",
+      field_schema: "keyword",
+    }),
+    qdrantClient.createPayloadIndex(collectionName, {
+      field_name: "documentId",
+      field_schema: "keyword",
+    }),
+    qdrantClient.createPayloadIndex(collectionName, {
+      field_name: "chunkIndex",
+      field_schema: "integer",
+    }),
+  ]);
 }

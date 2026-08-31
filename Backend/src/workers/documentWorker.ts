@@ -2,7 +2,18 @@ import { Worker } from "bullmq";
 import { redis } from "../libs/redis";
 import { QUEUE_NAMES } from "../queues/queueConstants";
 import { processDocument } from "./processDocument";
-import { ensurePayloadIndexes } from "../services/qdrantCollectionService";
+import {
+  ensurePayloadIndexes,
+  ensureQdrantCollection,
+} from "../services/qdrantCollectionService";
+
+// Ensure the collection exists with the sparse vector config hybrid retrieval
+// needs. Idempotent; fails loudly at boot if an existing collection lacks it
+// (must be recreated + re-ingested), so a stale dense-only collection is never
+// silently used.
+ensureQdrantCollection().catch((error) => {
+  console.warn("[worker] could not ensure Qdrant collection", error);
+});
 
 // Qdrant range filters (deleteStaleChunks) require a payload index on
 // chunkIndex. Ensure it at boot — idempotent, non-fatal if Qdrant is down

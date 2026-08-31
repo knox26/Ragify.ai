@@ -6,16 +6,28 @@ import { parseDocument } from "../parsers/documentParser";
 import { createLlamaChunks } from "../services/llamaDocumentService";
 import { generateEmbeddings } from "../services/embeddingService";
 import {
+  SPARSE_VECTOR_NAME,
+  sparseVectorFor,
+} from "../services/sparseVectorService";
+import {
   buildChunkPointId,
   upsertDocumentChunks,
   deleteStaleChunks,
 } from "../services/qdrantCollectionService";
 
-export async function processDocument(
-  job: Job<ProcessDocumentJob>,
+/**
+ * Process one document end-to-end: download from R2, parse to pages, chunk,
+ * embed, upsert to Qdrant, mark COMPLETED.
+ *
+ * Extracted from the BullMQ handler so the eval ingest path (and any batch
+ * tooling) can drive the exact same pipeline directly, without a queue.
+ *
+ * Idempotent: a COMPLETED document is a no-op; a QUEUED/PROCESSING document is
+ * claimed and reprocessed. On failure it marks FAILED and rethrows.
+ */
+export async function processDocumentById(
+  documentId: string,
 ): Promise<void> {
-  const { documentId } = job.data;
-
   const document = await prisma.document.findUnique({
     where: {
       id: documentId,
@@ -122,6 +134,7 @@ export async function processDocument(
     const embeddings = await generateEmbeddings({
       texts,
       taskType: "RETRIEVAL_DOCUMENT",
+      label: document.id,
     });
 
     // Safety check: make sure every chunk received an embedding.
@@ -141,11 +154,16 @@ export async function processDocument(
       return {
         id: buildChunkPointId(document.id, chunk.chunkIndex),
 
-        vector: embedding,
+        // Dense (unnamed) + sparse (named) coexist in one point for hybrid query.
+        vector: {
+          "": embedding,
+          [SPARSE_VECTOR_NAME]: sparseVectorFor(chunk.text),
+        },
 
         payload: {
           documentId: document.id,
           userId: document.userId,
+          fileName: document.fileName,
           ...chunk,
         },
       };
@@ -169,7 +187,6 @@ export async function processDocument(
         status: "COMPLETED",
       },
     });
-
   } catch (error) {
     // Unwrap the error chain — pipeline stages wrap failures (e.g.
     // embeddingService wraps the raw Gemini error in a batch message), so
@@ -181,10 +198,7 @@ export async function processDocument(
           : error.message
         : String(error);
 
-    console.error(
-      `[ingest] worker ${documentId}: FAILED (attempt ${job.attemptsMade + 1}/${job.opts.attempts ?? 1})`,
-      unwrapped,
-    );
+    console.error(`[ingest] ${documentId}: FAILED`, unwrapped);
 
     await prisma.document.update({
       where: {
@@ -198,8 +212,34 @@ export async function processDocument(
       },
     });
 
-    // Let BullMQ know the job failed so its retry/backoff
-    // mechanism can handle it.
+    throw error;
+  }
+}
+
+/**
+ * BullMQ worker handler. The queue adds retry/backoff; the attempt-count log
+ * stays here (processDocumentById has no job context).
+ */
+export async function processDocument(
+  job: Job<ProcessDocumentJob>,
+): Promise<void> {
+  const { documentId } = job.data;
+
+  try {
+    await processDocumentById(documentId);
+  } catch (error) {
+    const unwrapped =
+      error instanceof Error
+        ? error.cause instanceof Error
+          ? `${error.message} — cause: ${error.cause.message}`
+          : error.message
+        : String(error);
+
+    console.error(
+      `[ingest] worker ${documentId}: FAILED (attempt ${job.attemptsMade + 1}/${job.opts.attempts ?? 1})`,
+      unwrapped,
+    );
+
     throw error;
   }
 }

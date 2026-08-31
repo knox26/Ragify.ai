@@ -1,4 +1,5 @@
 import { Context } from "hono";
+import { UploadStatus } from "@prisma/client";
 import prisma from "../db/dbConfig";
 import {
   documentInitSchema,
@@ -6,6 +7,8 @@ import {
 } from "../validators/documentValidators";
 import { calculateMultipartInfo } from "../utils/calculateChunks";
 import { generateR2Key } from "../utils/r2Key";
+import { buildPage, keysetWhere, readPagination } from "../utils/pagination";
+import { isUuid } from "../utils/isUuid";
 
 import {
   createMultipartUpload,
@@ -14,6 +17,22 @@ import {
   completeMultipartUpload,
   r2ObjectExists,
 } from "../services/r2Service";
+
+/**
+ * Shared `status` query filter for the list and count endpoints. An absent
+ * param means "all statuses"; an invalid value is a client bug, so reject it
+ * rather than silently returning every row.
+ */
+function readStatusFilter(
+  query: Record<string, string | undefined>,
+): { ok: true; status?: UploadStatus } | { ok: false } {
+  const raw = query.status?.trim();
+  if (!raw) return { ok: true };
+  if (!(Object.values(UploadStatus) as string[]).includes(raw)) {
+    return { ok: false };
+  }
+  return { ok: true, status: raw as UploadStatus };
+}
 
 export const initUploadController = async (c: Context) => {
   try {
@@ -387,13 +406,130 @@ export const completeUploadController = async (c: Context) => {
   }
 };
 
+// Settled documents (COMPLETED / FAILED) can never change, so they're not
+// worth polling. The statuses endpoint only returns the rows a client could
+// act on — keeps the poll payload tiny.
+const NON_TERMINAL_STATUSES: UploadStatus[] = [
+  "PENDING_UPLOAD",
+  "UPLOAD_COMPLETED",
+  "QUEUED",
+  "PROCESSING",
+];
+
+export const getDocumentStatusesController = async (c: Context) => {
+  try {
+    const userId = c.get("userId");
+
+    // The poll is a bounded snapshot, not a navigable list: take the newest
+    // non-terminal rows (probe +1) and report whether more exist. That keeps
+    // the every-3s tick cheap even while abandoned uploads accumulate, and
+    // lets the frontend keep polling until the pile drains.
+    const pageParams = readPagination(c.req.query());
+    if (!pageParams.ok) {
+      return c.json({ success: false, message: pageParams.message }, 400);
+    }
+
+    const docs = await prisma.document.findMany({
+      where: { userId, status: { in: NON_TERMINAL_STATUSES } },
+      select: { id: true, status: true, updatedAt: true },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: pageParams.limit + 1,
+    });
+
+    const { rows, pagination } = buildPage(
+      docs,
+      pageParams.limit,
+      (doc) => ({ c: doc.updatedAt, i: doc.id }),
+    );
+
+    return c.json({ success: true, data: rows, pagination });
+  } catch (error) {
+    console.error("Failed to fetch document statuses:", error);
+
+    return c.json({ success: false, message: "Internal Server Error" }, 500);
+  }
+};
+
+export const getDocumentCountController = async (c: Context) => {
+  try {
+    const userId = c.get("userId");
+
+    const statusFilter = readStatusFilter(c.req.query());
+    if (!statusFilter.ok) {
+      return c.json({ success: false, message: "Invalid status filter" }, 400);
+    }
+
+    const count = await prisma.document.count({
+      where: {
+        userId,
+        ...(statusFilter.status ? { status: statusFilter.status } : {}),
+      },
+    });
+
+    return c.json({ success: true, data: { count } });
+  } catch (error) {
+    console.error("Failed to count documents:", error);
+
+    return c.json({ success: false, message: "Internal Server Error" }, 500);
+  }
+};
+
+export const getDocumentController = async (c: Context) => {
+  try {
+    const userId = c.get("userId");
+    const id = c.req.param("id") ?? "";
+
+    // Prisma would pass a non-UUID straight to Postgres and throw a 22P02
+    // invalid-input-syntax error (500). Reject it as a missing resource
+    // instead — same guard the chat controllers use.
+    if (!isUuid(id)) {
+      return c.json({ success: false, message: "Document not found" }, 404);
+    }
+
+    const doc = await prisma.document.findFirst({
+      where: { id, userId },
+      select: { id: true, fileName: true },
+    });
+
+    if (!doc) {
+      return c.json({ success: false, message: "Document not found" }, 404);
+    }
+
+    return c.json({ success: true, data: doc });
+  } catch (error) {
+    console.error("Failed to fetch document:", error);
+
+    return c.json({ success: false, message: "Internal Server Error" }, 500);
+  }
+};
+
 export const getDocumentsController = async (c: Context) => {
   try {
     const userId = c.get("userId");
 
+    const pageParams = readPagination(c.req.query());
+    if (!pageParams.ok) {
+      return c.json({ success: false, message: pageParams.message }, 400);
+    }
+
+    const statusFilter = readStatusFilter(c.req.query());
+    if (!statusFilter.ok) {
+      return c.json({ success: false, message: "Invalid status filter" }, 400);
+    }
+
+    // Case-insensitive name search, bounded to a sane length. The keyset
+    // cursor keeps pagination itself indexed; the substring match is served
+    // by the pg_trgm GIN index on "fileName" (add_file_name_trgm_index).
+    const search = c.req.query("search")?.trim().slice(0, 200);
+
     const documents = await prisma.document.findMany({
       where: {
         userId,
+        ...(statusFilter.status ? { status: statusFilter.status } : {}),
+        ...(search
+          ? { fileName: { contains: search, mode: "insensitive" } }
+          : {}),
+        ...keysetWhere("lt", pageParams.cursor, "createdAt"),
       },
       select: {
         id: true,
@@ -403,19 +539,23 @@ export const getDocumentsController = async (c: Context) => {
         status: true,
         createdAt: true,
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: pageParams.limit + 1,
     });
 
-    const formattedDocuments = documents.map((doc) => ({
-      ...doc,
-      fileSize: Number(doc.fileSize),
-    }));
+    const { rows, pagination } = buildPage(
+      documents,
+      pageParams.limit,
+      (doc) => ({ c: doc.createdAt, i: doc.id }),
+    );
 
     return c.json({
       success: true,
-      data: formattedDocuments,
+      data: rows.map((doc) => ({
+        ...doc,
+        fileSize: Number(doc.fileSize),
+      })),
+      pagination,
     });
   } catch (error) {
     console.error("Failed to fetch documents:", error);
