@@ -6,7 +6,7 @@ import {
   chatMessageSchema,
   renameChatSchema,
 } from "../validators/chatValidators";
-import { retrieveWithGapFill } from "../services/gapFillService";
+import { retrievePipeline } from "../services/retrievalPipeline";
 import {
   buildSources,
   buildSystemPrompt,
@@ -191,14 +191,27 @@ export const messageController = async (c: Context) => {
         }),
       );
 
-      // Decompose, retrieve, merge, then (bounded) gap-fill: if the excerpts
-      // are still missing a piece needed to answer, retrieve for it and widen
-      // context before generating. A simple, fully-covered question costs one
-      // extra gap-check call and nothing else.
-      const chunks = await retrieveWithGapFill({
+      // Phase 1 retrieval pipeline: rewrite → route → rerank. Same first
+      // stage (decompose + hybrid retrieve + gap-fill) but the candidates
+      // are rescored by a cross-encoder and narrowed to RERANK_TOP_K (8).
+      // Observability hook emits one non-PII structured line per request —
+      // never logs rewrite text, rerank text, or answer content.
+      const chunks = await retrievePipeline({
         userId,
         question: cleanContent,
         documentId: effectiveDocumentId,
+        observer: (m) => {
+          console.log(
+            `[pipeline] ` +
+              `route=${m.route} (${m.routeSource}) ` +
+              `variants=${m.variantCount} ` +
+              `pool=${m.candidatePoolSize} ` +
+              `rerank=${m.rerankProvider} ` +
+              `latency=${m.rerankLatencyMs}ms ` +
+              `gap_rounds=${m.gapFillRounds} ` +
+              `final=${m.finalChunkCount}`,
+          );
+        },
       });
 
       sources = buildSources(chunks);

@@ -68,6 +68,11 @@ export function buildChunkPointId(
 
 /**
  * Payload stored alongside every Qdrant vector.
+ *
+ * Phase-2 fields are optional in the type so pre-Phase-2 points keep parsing
+ * (retrieval is defensive), but payloadMapper requires them on every
+ * Phase-2-written point. New metadata is payload-only: no collection rebuild,
+ * dense + sparse still live on the same point.
  */
 export type QdrantChunkPayload = {
   documentId: string;
@@ -79,6 +84,15 @@ export type QdrantChunkPayload = {
   endOffset: number;
   pageStart: number;
   pageEnd: number;
+  // Phase 2 (payload only — never embedded):
+  chunkType?: "table" | "prose";
+  statementType?: string;
+  consolidationScope?: string;
+  sectionPath?: string[];
+  parentId?: string | null;
+  parentText?: string;
+  contentHash?: string;
+  processingVersion?: number;
 };
 
 /**
@@ -228,6 +242,15 @@ export async function verifyQdrantCollection(): Promise<void> {
  * We intentionally do NOT delete the entire document
  * before upserting the new version.
  */
+/**
+ * Max points per upsert request. A whole-document single upsert exceeds
+ * Qdrant Cloud's request-size limit once a doc reaches ~1000+ chunks
+ * (1536-dim vectors + parent-text payloads ≈ 25MB at 2000 points → HTTP 400),
+ * so large docs are sent in sequential batches. Same signature and
+ * wait:true semantics — callers are unchanged.
+ */
+const UPSERT_BATCH_SIZE = 250;
+
 export async function upsertDocumentChunks(
   points: QdrantPoint[],
 ): Promise<void> {
@@ -236,10 +259,12 @@ export async function upsertDocumentChunks(
   }
 
   try {
-    await qdrantClient.upsert(collectionName, {
-      wait: true,
-      points,
-    });
+    for (let i = 0; i < points.length; i += UPSERT_BATCH_SIZE) {
+      await qdrantClient.upsert(collectionName, {
+        wait: true,
+        points: points.slice(i, i + UPSERT_BATCH_SIZE),
+      });
+    }
   } catch (error) {
     throw new Error(
       `Failed to upsert ${points.length} chunk(s) to Qdrant collection "${collectionName}"`,

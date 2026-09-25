@@ -1,13 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 import type { RetrievedChunk } from "./retrievalService";
+import {
+  availableGeminiClientCount,
+  configuredGeminiKeyCount,
+  pickNextGeminiClient,
+  rotateAfterRateLimit,
+} from "./geminiClient";
+import { rateLimitInfo, RATE_LIMIT_DEFAULT_RETRY_MS } from "../utils/retry";
 
-const GEMINI_API_KEY = Bun.env.GEMINI_API_KEY;
-
-if (!GEMINI_API_KEY) {
+if (configuredGeminiKeyCount() === 0) {
   throw new Error("GEMINI_API_KEY is not configured");
 }
-
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // gemini-2.0-flash was retired (API 404 "no longer available"). 3.6-flash is
 // the current default; override via GEMINI_CHAT_MODEL.
@@ -59,7 +62,11 @@ export function buildSystemPrompt(): string {
     "",
     "Rules:",
     "- Base every factual claim on the numbered document excerpts in the user message. Cite claims with inline [n] markers. Never cite a source that is not listed.",
+    "- Answer using ONLY those excerpts. Do not fill gaps with prior or training knowledge; anything not in the excerpts stays out of the answer.",
+    "- Quote key figures, names, and dates verbatim from the excerpts instead of paraphrasing them.",
+    "- When the question has multiple parts, answer every part. When the excerpts describe multiple aspects of the answer, cover all of them rather than stopping at the first match.",
     "- Combine information from multiple excerpts when the answer needs it. If the excerpts contain the pieces, compute the result (ratios, differences, percentages, sums) and show the arithmetic. Do not refuse simply because the figures are spread across different excerpts.",
+    "- When the question's key terms appear nowhere in the excerpts (a hypothetical scenario, a paraphrase), first map them to the closest metric the excerpts define, and answer from that mapping. Only conclude something is missing when no excerpt maps to what is asked.",
     "- Numbers in parentheses or with a leading minus sign are negative. Preserve signs exactly when reading or quoting them.",
     "- When asked a yes/no or classification question, give the determination with reasoning whenever the excerpts support it, rather than declining to judge.",
     "- If a required fact is genuinely not in the excerpts, say so plainly and name what is missing. Never guess, never invent facts, and never fill in numbers the excerpts do not provide.",
@@ -137,6 +144,48 @@ export function buildSources(chunks: RetrievedChunk[]): ChatSourcePayload[] {
  * calls (sub-query decomposition) that need the full response in one piece.
  * Thinking is bounded so these return fast and stay within a small budget.
  */
+/**
+ * Try a generateContent call against one client. On a rate-limit, rotate
+ * to the next healthy client and try once more.
+ */
+async function generateContentWithRotation(args: {
+  system: string;
+  user: string;
+  maxOutputTokens: number;
+}): Promise<string> {
+  let client = pickNextGeminiClient();
+
+  while (client) {
+    try {
+      const response = await client.models.generateContent({
+        model: CHAT_MODEL,
+        contents: [{ role: "user", parts: [{ text: args.user }] }],
+        config: {
+          systemInstruction: args.system,
+          temperature: 0.2,
+          maxOutputTokens: args.maxOutputTokens,
+          thinkingConfig: { thinkingBudget: 1024 },
+        },
+      });
+
+      return response.text ?? "";
+    } catch (error) {
+      const rl = rateLimitInfo(error);
+      // Stop trying if the error isn't a rate-limit, or every healthy
+      // client is exhausted.
+      if (!rl.isRateLimit || availableGeminiClientCount() === 0) {
+        throw error;
+      }
+      // Rotate to the next healthy key. The API's retryMs may be shorter
+      // than the cooldown, but rotation still spreads load and avoids
+      // hammering the exhausted key.
+      client = rotateAfterRateLimit(client, Math.min(rl.retryMs, RATE_LIMIT_DEFAULT_RETRY_MS));
+    }
+  }
+
+  throw new Error("no Gemini key available");
+}
+
 export async function generateText({
   system,
   user,
@@ -146,18 +195,7 @@ export async function generateText({
   user: string;
   maxOutputTokens?: number;
 }): Promise<string> {
-  const response = await ai.models.generateContent({
-    model: CHAT_MODEL,
-    contents: [{ role: "user", parts: [{ text: user }] }],
-    config: {
-      systemInstruction: system,
-      temperature: 0.2,
-      maxOutputTokens,
-      thinkingConfig: { thinkingBudget: 1024 },
-    },
-  });
-
-  return response.text ?? "";
+  return generateContentWithRotation({ system, user, maxOutputTokens });
 }
 
 export async function* streamChatAnswer({
@@ -167,19 +205,47 @@ export async function* streamChatAnswer({
   systemPrompt: string;
   userPrompt: string;
 }): AsyncGenerator<string> {
-  const stream = await ai.models.generateContentStream({
-    model: CHAT_MODEL,
-    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.2,
-      // gemini-3.6-flash is a thinking model: hidden reasoning tokens count
-      // against maxOutputTokens. 1024 left only ~36 tokens for the visible
-      // answer (observed MAX_TOKENS truncation at ~150 chars). 8192 gives the
-      // answer room; the system prompt still bounds length.
-      maxOutputTokens: 8192,
-    },
-  });
+  // Chat streaming is on the user-facing path. Try the first healthy key;
+  // on rate-limit, rotate once. If even the rotated key has no quota, the
+  // error propagates up — the controller's catch persists a partial answer.
+  let client = pickNextGeminiClient();
+
+  if (!client) {
+    throw new Error("no Gemini key available");
+  }
+
+  let stream;
+  try {
+    stream = await client.models.generateContentStream({
+      model: CHAT_MODEL,
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.2,
+        // gemini-3.6-flash is a thinking model: hidden reasoning tokens
+        // count against maxOutputTokens. 1024 left only ~36 tokens for the
+        // visible answer (observed MAX_TOKENS truncation at ~150 chars).
+        // 8192 gives the answer room; the system prompt still bounds length.
+        maxOutputTokens: 8192,
+      },
+    });
+  } catch (error) {
+    const rl = rateLimitInfo(error);
+    if (!rl.isRateLimit) throw error;
+
+    client = rotateAfterRateLimit(client, Math.min(rl.retryMs, RATE_LIMIT_DEFAULT_RETRY_MS));
+    if (!client) throw error;
+
+    stream = await client.models.generateContentStream({
+      model: CHAT_MODEL,
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.2,
+        maxOutputTokens: 8192,
+      },
+    });
+  }
 
   for await (const chunk of stream) {
     const text = chunk.text;

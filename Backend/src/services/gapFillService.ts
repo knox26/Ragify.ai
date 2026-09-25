@@ -15,10 +15,13 @@ import {
 // enough to answer. When a piece is missing, ask the model to name it, run a
 // targeted follow-up retrieval for that piece, and re-merge with a wider cap.
 // Bounded so a confident-but-wrong gap judgment can't loop forever.
-const GAP_FILL_ENABLED = (Bun.env.GAP_FILL_ENABLED ?? "true") !== "false";
+//
+// Phase 1: the orchestration moved to `services/retrievalPipeline.ts`. This
+// module still owns `detectGaps` because the pipeline uses it directly.
+export const GAP_FILL_ENABLED = (Bun.env.GAP_FILL_ENABLED ?? "true") !== "false";
 export const GAP_FILL_MAX_ROUNDS = Number(Bun.env.GAP_FILL_MAX_ROUNDS ?? 2);
 export const GAP_FILL_TOP_K = Number(Bun.env.GAP_FILL_TOP_K ?? 12);
-export const GAP_FILL_MAX_CHUNKS = Number(Bun.env.GAP_FILL_MAX_CHUNKS ?? 16);
+export const GAP_FILL_MAX_CHUNKS = Number(Bun.env.GAP_FILL_MAX_CHUNKS ?? 32);
 
 // How much of each chunk's text the gap check sees. Enough to read financial
 // statement line-item labels without paying to ship the whole excerpt twice.
@@ -69,7 +72,10 @@ export function parseGapResponse(raw: string): string[] {
     .slice(0, 3);
 }
 
-async function detectGaps(
+/**
+ * LLM-based gap detector. Used by the Phase 1 retrieval pipeline.
+ */
+export async function detectGaps(
   question: string,
   chunks: RetrievedChunk[],
 ): Promise<string[]> {
@@ -101,9 +107,11 @@ async function detectGaps(
 }
 
 /**
- * Full retrieval path: decompose -> parallel hybrid retrieval per subquery ->
- * merge to CHAT_TOP_K, then bounded gap-fill rounds that widen context only
- * when the model says a needed piece is still missing.
+ * Compatibility shim — kept for any caller that still imports
+ * `retrieveWithGapFill`. Delegates to the Phase 1 pipeline with the
+ * "default" route, which reproduces today's behavior exactly
+ * (decompose + gap-fill, no HyDE/step-back, no reranker scoring beyond
+ * Noop's stable top-K ordering). Will be removed in milestone 9.
  */
 export async function retrieveWithGapFill({
   userId,
@@ -114,56 +122,20 @@ export async function retrieveWithGapFill({
   question: string;
   documentId?: string | null;
 }): Promise<RetrievedChunk[]> {
-  const subqueries = await decomposeQuery(question);
+  const { retrievePipeline } = await import("./retrievalPipeline");
 
-  const groups = await Promise.all(
-    subqueries.map((subquery) =>
-      retrieveChunks({
-        userId,
-        query: subquery,
-        documentId,
-        topK: SUB_QUERY_TOP_K,
-      }),
-    ),
-  );
-
-  let chunks = mergeSubqueryChunks(groups, CHAT_TOP_K);
-
-  if (!GAP_FILL_ENABLED) {
-    return chunks;
-  }
-
-  for (let round = 0; round < GAP_FILL_MAX_ROUNDS; round++) {
-    const gaps = await detectGaps(question, chunks);
-
-    if (gaps.length === 0) {
-      break;
-    }
-
-    const extraGroups = await Promise.all(
-      gaps.map((gapQuery) =>
-        retrieveChunks({
-          userId,
-          query: gapQuery,
-          documentId,
-          topK: GAP_FILL_TOP_K,
-        }),
-      ),
-    );
-
-    const merged = mergeSubqueryChunks(
-      [chunks, ...extraGroups],
-      GAP_FILL_MAX_CHUNKS,
-    );
-
-    // No new distinct chunks means the follow-up retrieval added nothing; stop
-    // rather than paying for another round that can't help.
-    if (merged.length === chunks.length) {
-      break;
-    }
-
-    chunks = merged;
-  }
-
-  return chunks;
+  return retrievePipeline({
+    userId,
+    question,
+    documentId,
+    // "default" route → today's full path (decompose + gap-fill, no
+    // HyDE/step-back). No reranker scoring beyond Noop.
+    router: async () => ({ route: "default", source: "default", confidence: 0 }),
+    rewriter: async (q: string) => [
+      { kind: "original" as const, text: q },
+      ...((await decomposeQuery(q))
+        .filter((s) => s && s !== q)
+        .map((s) => ({ kind: "subquery" as const, text: s }))),
+    ],
+  });
 }

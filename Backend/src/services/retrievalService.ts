@@ -25,6 +25,8 @@ export type RetrievedChunk = {
   pageStart: number;
   pageEnd: number;
   score: number;
+  /** Section context from payload (Fix B1). Absent on pre-Phase-2 points. */
+  parentText?: string;
 };
 
 /**
@@ -83,7 +85,7 @@ export function toRetrievedChunk(
     return null;
   }
 
-  return {
+  const chunk: RetrievedChunk = {
     documentId,
     // Old points (ingested before fileName was added) lack the field — fall
     // back to the generic label so sources keep a sane name instead of "undefined".
@@ -95,6 +97,14 @@ export function toRetrievedChunk(
     pageEnd,
     score: typeof point.score === "number" ? point.score : 0,
   };
+
+  // Pre-Phase-2 points lack parent context — leave absent (Fix B1 degrades
+  // to child-only text for them instead of crashing or fabricating).
+  if (typeof payload.parentText === "string" && payload.parentText.trim()) {
+    chunk.parentText = payload.parentText;
+  }
+
+  return chunk;
 }
 
 /**

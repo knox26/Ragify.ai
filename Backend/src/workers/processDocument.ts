@@ -3,27 +3,33 @@ import type { ProcessDocumentJob } from "../queues/documentQueue";
 import prisma from "../db/dbConfig";
 import { downloadDocument } from "../services/downloadDocumentService";
 import { parseDocument } from "../parsers/documentParser";
-import { createLlamaChunks } from "../services/llamaDocumentService";
+import { combinePages, createLlamaChunks } from "../services/llamaDocumentService";
 import { generateEmbeddings } from "../services/embeddingService";
+import { sparseVectorFor } from "../services/sparseVectorService";
+import { computeContentHash } from "../services/chunking/chunkPipeline";
+import { SEMANTIC_CHUNKING_ENABLED } from "../services/chunking/constants";
+import { chunkToPoint } from "../services/chunking/payloadMapper";
 import {
-  SPARSE_VECTOR_NAME,
-  sparseVectorFor,
-} from "../services/sparseVectorService";
-import {
-  buildChunkPointId,
   upsertDocumentChunks,
   deleteStaleChunks,
 } from "../services/qdrantCollectionService";
 
 /**
- * Process one document end-to-end: download from R2, parse to pages, chunk,
- * embed, upsert to Qdrant, mark COMPLETED.
+ * Process one document end-to-end: download from R2, parse to pages, chunk
+ * (Phase 2 structure-aware chunking via createLlamaChunks), embed, upsert to
+ * Qdrant, mark COMPLETED.
  *
  * Extracted from the BullMQ handler so the eval ingest path (and any batch
  * tooling) can drive the exact same pipeline directly, without a queue.
  *
- * Idempotent: a COMPLETED document is a no-op; a QUEUED/PROCESSING document is
- * claimed and reprocessed. On failure it marks FAILED and rethrows.
+ * Idempotency:
+ * - A COMPLETED document whose stored contentHash matches the recomputed
+ *   hash is a no-op (no embedding cost, no Qdrant writes, no status change).
+ * - Point IDs are deterministic UUIDv5(documentId:chunkIndex), so
+ *   reprocessing overwrites in place; trailing stale chunks are deleted
+ *   AFTER the upsert, never before — a failed re-ingest keeps the last
+ *   known-good searchable version (no delete-first empty window).
+ * On failure it marks FAILED and rethrows.
  */
 export async function processDocumentById(
   documentId: string,
@@ -38,14 +44,29 @@ export async function processDocumentById(
     throw new Error(`Document ${documentId} not found`);
   }
 
-  // Claim atomically. Accept both QUEUED (normal path) and PROCESSING
-  // (stalled re-run after a crash mid-job): if the worker died after
-  // claiming but before marking COMPLETED, BullMQ's stalled-job recovery
-  // re-runs this job while the document is still PROCESSING. It must be
-  // re-claimable or the document would be stuck forever. The UUIDv5 point
-  // IDs make the re-run idempotent, so re-processing is safe.
+  // 1-2. Download + parse first (read-only): the content hash needs the
+  // parsed text, and a hash-match no-op must not touch the status row.
+  const fileBuffer = await downloadDocument({
+    r2Key: document.r2Key,
+  });
+
+  const pages = await parseDocument({
+    buffer: fileBuffer,
+    mimeType: document.mimeType,
+  });
+
+  const contentHash = computeContentHash(combinePages(pages).text);
+
+  if (document.status === "COMPLETED" && document.contentHash === contentHash) {
+    console.log(`[ingest] ${documentId}: unchanged contentHash, skipping re-ingest`);
+    return;
+  }
+
+  // Claim atomically. Accept QUEUED (normal path), PROCESSING (stalled
+  // re-run after a crash mid-job), and COMPLETED (explicit re-ingest with a
+  // changed hash — the UUIDv5 point IDs make the re-run idempotent).
   const claimed = await prisma.document.updateMany({
-    where: { id: documentId, status: { in: ["QUEUED", "PROCESSING"] } },
+    where: { id: documentId, status: { in: ["QUEUED", "PROCESSING", "COMPLETED"] } },
     data: { status: "PROCESSING" },
   });
 
@@ -64,20 +85,8 @@ export async function processDocumentById(
   }
 
   try {
-    // 1. Download original document from R2
-    const fileBuffer = await downloadDocument({
-      r2Key: document.r2Key,
-    });
-
-    // 2. Parse document into pages
-    const pages = await parseDocument({
-      buffer: fileBuffer,
-      mimeType: document.mimeType,
-    });
-
-    // 3. Create lightweight semantic chunks using LlamaIndex.
-    //
-    // createLlamaChunks() returns:
+    // 3. Create Phase-2 chunks (heading sections, row-aligned tables with
+    // sticky headers, parent context, statement tags). Returns:
     //
     // {
     //   chunkIndex,
@@ -88,11 +97,11 @@ export async function processDocumentById(
     //   pageEnd
     // }
     //
-    // We no longer carry LlamaIndex TextNode objects
-    // through the rest of the pipeline.
+    // (plus section/parent/statement metadata carried into the payload).
     const processedChunks = await createLlamaChunks({
       pages,
       documentId: document.id,
+      semanticEnabled: SEMANTIC_CHUNKING_ENABLED,
     });
 
     // 4. No searchable content
@@ -124,7 +133,8 @@ export async function processDocumentById(
     // processedChunks[1] -> embeddings[1]
     // processedChunks[2] -> embeddings[2]
     //
-    // The order must remain unchanged.
+    // The order must remain unchanged. Chunk text is the ONLY embed source —
+    // parentText/sectionPath/statement tags ride as payload, never embedded.
     const texts = processedChunks.map((chunk) => chunk.text);
 
     // 6. Generate document embeddings.
@@ -151,40 +161,56 @@ export async function processDocumentById(
         throw new Error(`Missing embedding for chunk ${chunk.chunkIndex}`);
       }
 
-      return {
-        id: buildChunkPointId(document.id, chunk.chunkIndex),
-
-        // Dense (unnamed) + sparse (named) coexist in one point for hybrid query.
-        vector: {
-          "": embedding,
-          [SPARSE_VECTOR_NAME]: sparseVectorFor(chunk.text),
+      return chunkToPoint(
+        {
+          chunkIndex: chunk.chunkIndex,
+          kind: chunk.kind ?? "prose",
+          text: chunk.text,
+          startOffset: chunk.startOffset,
+          endOffset: chunk.endOffset,
+          pageStart: chunk.pageStart,
+          pageEnd: chunk.pageEnd,
+          sectionPath: chunk.sectionPath ?? [],
+          parentId: chunk.parentId ?? null,
+          parentText: chunk.parentText ?? "",
+          statementType:
+            (chunk.statementType as
+              | "balance_sheet"
+              | "income_statement"
+              | "cash_flow"
+              | "equity"
+              | "notes"
+              | "mdna"
+              | "other") ?? "other",
+          consolidationScope:
+            (chunk.consolidationScope as
+              | "consolidated"
+              | "parent_company"
+              | "unspecified") ?? "unspecified",
         },
-
-        payload: {
-          documentId: document.id,
-          userId: document.userId,
-          fileName: document.fileName,
-          ...chunk,
-        },
-      };
+        { id: document.id, userId: document.userId, fileName: document.fileName },
+        embedding,
+        sparseVectorFor(chunk.text),
+        contentHash,
+      );
     });
 
+    // 7. Upsert first, THEN delete trailing stale chunks. Never delete-first:
+    // Qdrant has no atomic swap, so delete-then-upsert would leave an empty
+    // (or half old / half new) document visible on failure.
     await upsertDocumentChunks(qdrantPoints);
 
     await deleteStaleChunks(document.id, processedChunks.length);
 
-    // 8. Mark processing as successfully completed.
-    //
-    // NOTE:
-    // For the moment this happens after embedding generation.
-    // Once Qdrant indexing is implemented, COMPLETED should
-    // only happen after the Qdrant upsert + stale cleanup succeeds.
+    // 8. Mark processing as successfully completed + record the hash so the
+    // next identical re-ingest is a no-op.
     await prisma.document.update({
       where: {
         id: documentId,
       },
       data: {
         status: "COMPLETED",
+        contentHash,
       },
     });
   } catch (error) {

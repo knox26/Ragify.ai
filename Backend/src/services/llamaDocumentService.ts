@@ -1,5 +1,5 @@
-import { Document, SentenceSplitter } from "llamaindex";
 import type { ParsedPage } from "../parsers/parserTypes";
+import { chunkDocument } from "./chunking/chunkPipeline";
 
 // Chunk size in TOKENS (~4 chars/token). Applied per page — chunks never
 // cross page boundaries. Env-overridable so a page-aware chunk budget can be
@@ -21,6 +21,12 @@ const TABLE_LINE_TAIL = /[%₹$€£\d/-]\s*$/;
 interface CreateLlamaChunksParams {
   pages: ParsedPage[];
   documentId: string;
+  /**
+   * Opt into embedding-backed semantic splitting (one batched call per long
+   * prose run). Defaults OFF so the library path stays pure, deterministic,
+   * and network-free; production passes the SEMANTIC_CHUNKING_ENABLED flag.
+   */
+  semanticEnabled?: boolean;
 }
 
 export interface ProcessedChunk {
@@ -30,6 +36,14 @@ export interface ProcessedChunk {
   endOffset: number;
   pageStart: number;
   pageEnd: number;
+  // Phase 2 metadata (populated by the chunkPipeline delegate; optional so
+  // pre-Phase-2 callers/tests keep compiling).
+  kind?: "table" | "prose";
+  sectionPath?: string[];
+  parentId?: string | null;
+  parentText?: string;
+  statementType?: string;
+  consolidationScope?: string;
 }
 
 interface PageOffset {
@@ -46,12 +60,12 @@ export const PAGE_SEPARATOR = "\n\n";
 // LlamaIndex's indexOf-based offset derivation fails and leaked codes would
 // reach Qdrant. Match the node within its page, returning the REAL page
 // slice so offsets stay exact and both corruptions are repaired.
-interface LocatedText {
+export interface LocatedText {
   index: number;
   text: string;
 }
 
-function locateInPage(
+export function locateInPage(
   pageText: string,
   content: string,
   from: number,
@@ -231,109 +245,40 @@ export function chunkTablePage(text: string): TableChunk[] {
 /**
  * Create lightweight application-level chunks from a document.
  *
- * LlamaIndex is used only for:
- *
- *   Page text -> SentenceSplitter -> TextNode[]
- *
- * Each page is split independently so chunks never cross page boundaries;
- * table pages are split at row boundaries so table rows never split. The
- * LlamaIndex TextNode objects are immediately converted into ProcessedChunk
- * objects so they do not need to travel through the rest of the processing
- * pipeline.
+ * Phase 2: delegates to the structure-aware chunkPipeline (heading sections,
+ * row-aligned tables with sticky headers, parent context, statement tags)
+ * and maps back to ProcessedChunk[] — the fields the worker + tests read.
+ * Sentence splitting still uses llamaindex SentenceSplitter per page/run
+ * (chunks never cross pages except a page-break-split table, which stays
+ * page-local with re-attached headers), and the locate-in-page offset repair
+ * now lives in chunking/proseChunker.
  */
 export async function createLlamaChunks({
   pages,
   documentId,
+  semanticEnabled = false,
 }: CreateLlamaChunksParams): Promise<ProcessedChunk[]> {
   if (pages.length === 0) {
     return [];
   }
 
   try {
-    const splitter = new SentenceSplitter({
-      chunkSize: CHUNK_SIZE,
-      chunkOverlap: CHUNK_OVERLAP,
-    });
+    const chunks = await chunkDocument(pages, documentId, { semanticEnabled });
 
-    const chunks: ProcessedChunk[] = [];
-    // Absolute offset of the next page within the equivalent combinePages()
-    // output (separator + text per non-leading page), so startOffset/endOffset
-    // still index the combined document exactly.
-    let cursor = 0;
-    let chunkIndex = 0;
-
-    for (const page of pages) {
-      if (cursor > 0) {
-        cursor += PAGE_SEPARATOR.length;
-      }
-
-      const base = cursor;
-      cursor += page.text.length;
-
-      if (!page.text.trim()) {
-        continue;
-      }
-
-      if (isTablePage(page.text)) {
-        for (const tableChunk of chunkTablePage(page.text)) {
-          chunks.push({
-            chunkIndex: chunkIndex++,
-            text: tableChunk.text,
-            startOffset: base + tableChunk.startOffset,
-            endOffset: base + tableChunk.endOffset,
-            pageStart: page.pageNumber,
-            pageEnd: page.pageNumber,
-          });
-        }
-        continue;
-      }
-
-      // Each page is its own LlamaIndex document, so node offsets are relative
-      // to the page text; shift by `base` to absolute.
-      const llamaDocument = new Document({
-        text: page.text,
-        id_: `${documentId}:${page.pageNumber}`,
-      });
-
-      // Offsets are matched within this page's text (relative), then shifted
-      // by `base`. Tracking the previous match keeps offsets monotonic when
-      // overlapping chunks make a naive search-from-zero ambiguous.
-      let pageCursor = 0;
-
-      for (const node of splitter.getNodesFromDocuments([llamaDocument])) {
-        const chunkText = node.getContent();
-
-        if (!chunkText.trim()) {
-          throw new Error(`LlamaIndex node ${node.id_} contains empty text`);
-        }
-
-        // LlamaIndex derives node offsets via page.indexOf(node text). That
-        // fails (and leaves offsets undefined) whenever the natural tokenizer
-        // leaks a {{CODE_n}} placeholder into node text — e.g. "www.boeing.com"
-        // becomes "www.boe{{ABBREV_1}}com". Matching against the page directly
-        // gives exact offsets AND repairs the leaked text in one step.
-        const located = locateInPage(page.text, chunkText, pageCursor);
-
-        if (!located) {
-          throw new Error(
-            `LlamaIndex node ${node.id_} could not be located within its page`,
-          );
-        }
-
-        pageCursor = located.index + 1;
-
-        chunks.push({
-          chunkIndex: chunkIndex++,
-          text: located.text,
-          startOffset: base + located.index,
-          endOffset: base + located.index + located.text.length,
-          pageStart: page.pageNumber,
-          pageEnd: page.pageNumber,
-        });
-      }
-    }
-
-    return chunks;
+    return chunks.map((chunk) => ({
+      chunkIndex: chunk.chunkIndex,
+      text: chunk.text,
+      startOffset: chunk.startOffset,
+      endOffset: chunk.endOffset,
+      pageStart: chunk.pageStart,
+      pageEnd: chunk.pageEnd,
+      kind: chunk.kind,
+      sectionPath: chunk.sectionPath,
+      parentId: chunk.parentId,
+      parentText: chunk.parentText,
+      statementType: chunk.statementType,
+      consolidationScope: chunk.consolidationScope,
+    }));
   } catch (error) {
     throw new Error(`Failed to create chunks for document "${documentId}"`, {
       cause: error,
