@@ -3,6 +3,7 @@ import * as chatService from "../services/chatService";
 import { CHAT_TOP_K, type RetrievedChunk } from "../services/retrievalService";
 import {
   SUB_QUERY_MAX,
+  augmentCollectionSubqueries,
   mergeSubqueryChunks,
   parseSubqueries,
 } from "../services/subqueryService";
@@ -174,5 +175,28 @@ describe("decomposeQuery (via mocked generateText)", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("augmentCollectionSubqueries", () => {
+  test("adds collection variant to how-annotated questions", () => {
+    const out = augmentCollectionSubqueries("How is intent annotated?", [
+      "How is intent annotated?",
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[1]).toMatch(/platform/);
+  });
+
+  test("skips when a collect variant already exists", () => {
+    const subs = ["How is intent annotated?", "How was data collected?"];
+    expect(augmentCollectionSubqueries("How is intent annotated?", subs)).toEqual(subs);
+  });
+
+  test("skips non-collection questions and full lists", () => {
+    expect(augmentCollectionSubqueries("What was revenue?", ["What was revenue?"])).toEqual([
+      "What was revenue?",
+    ]);
+    const full = ["a", "b", "c"].slice(0, SUB_QUERY_MAX);
+    expect(augmentCollectionSubqueries("How is intent annotated?", full)).toEqual(full);
   });
 });

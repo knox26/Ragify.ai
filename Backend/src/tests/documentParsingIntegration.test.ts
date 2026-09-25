@@ -311,12 +311,13 @@ describe("DOCX parsing integration", () => {
     });
 
     /*
-     * SentenceSplitter runs at chunkSize 400 tokens (~1600 chars). The resume
-     * fixture is ~2100 chars on one logical page, so it splits into 2 chunks —
-     * this exact count is intentional and will fail loudly if chunking
-     * behavior changes again.
+     * Phase 2: headings delimit sections, so the resume's headed sections
+     * (PROFESSIONAL SUMMARY, per-skill groups, EXPERIENCE, PROJECTS,
+     * EDUCATION, CERTIFICATIONS, LANGUAGES) chunk per-section instead of by
+     * raw token budget — 14 chunks for this fixture. This exact count is
+     * intentional and will fail loudly if chunking behavior changes again.
      */
-    expect(chunks).toHaveLength(2);
+    expect(chunks).toHaveLength(14);
 
     const combinedChunkText = chunks.map((chunk) => chunk.text).join("");
 
@@ -344,12 +345,13 @@ describe("DOCX parsing integration", () => {
       expect(chunk.endOffset).toBeGreaterThan(chunk.startOffset);
 
       /*
-       * Most important offset invariant:
-       * the character range must reproduce the exact chunk text.
+       * Most important offset invariant (prefix-aware): Phase 2 prepends
+       * section headings / repeated table headers, so the slice must be a
+       * non-empty SUFFIX of the chunk text, never a mismatch.
        */
-      expect(combinedText.slice(chunk.startOffset, chunk.endOffset)).toBe(
-        chunk.text,
-      );
+      const slice = combinedText.slice(chunk.startOffset, chunk.endOffset);
+      expect(slice.trim().length).toBeGreaterThan(0);
+      expect(chunk.text.endsWith(slice)).toBe(true);
     }
   });
 });

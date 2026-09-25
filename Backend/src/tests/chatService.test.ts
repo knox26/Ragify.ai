@@ -41,6 +41,22 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/\[n\]/);
     expect(prompt).toMatch(/never cite a source that is not listed/i);
   });
+
+  test("maps unmatched question terms before concluding anything is missing", () => {
+    const prompt = buildSystemPrompt();
+
+    expect(prompt).toMatch(/map them to the closest metric/i);
+    expect(prompt).toMatch(/only conclude something is missing/i);
+  });
+
+  test("restricts answers to the excerpts, verbatim figures, full coverage", () => {
+    const prompt = buildSystemPrompt();
+
+    expect(prompt).toMatch(/answer using only those excerpts/i);
+    expect(prompt).toMatch(/quote key figures.*verbatim/i);
+    expect(prompt).toMatch(/answer every part/i);
+    expect(prompt).toMatch(/cover all of them/i);
+  });
 });
 
 describe("buildUserPrompt", () => {

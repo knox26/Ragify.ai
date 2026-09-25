@@ -336,9 +336,11 @@ describe("createLlamaChunks", () => {
       expect(chunk.startOffset).toBeGreaterThanOrEqual(0);
       expect(chunk.endOffset).toBeGreaterThan(chunk.startOffset);
       expect(chunk.endOffset).toBeLessThanOrEqual(combinedText.length);
-      expect(combinedText.slice(chunk.startOffset, chunk.endOffset)).toBe(
-        chunk.text,
-      );
+      // Prefix-aware: section-heading prefixes ride along, the slice is
+      // always a non-empty suffix of the chunk text.
+      const slice = combinedText.slice(chunk.startOffset, chunk.endOffset);
+      expect(slice.trim().length).toBeGreaterThan(0);
+      expect(chunk.text.endsWith(slice)).toBe(true);
     }
 
     const unicodeChunk = chunks.find(
@@ -401,7 +403,7 @@ describe("createLlamaChunks", () => {
     }
   });
 
-  test("should wrap LlamaIndex failures with domain context", async () => {
+  test("LlamaIndex failure on one block skips the block, never the document (D8 fail-open)", async () => {
     const spy = spyOn(
       SentenceSplitter.prototype,
       "getNodesFromDocuments",
@@ -410,14 +412,13 @@ describe("createLlamaChunks", () => {
     });
 
     try {
-      await expect(
-        createLlamaChunks({
-          pages: [{ pageNumber: 1, text: "test document" }],
-          documentId: "test-document-id",
-        }),
-      ).rejects.toThrow(
-        'Failed to create chunks for document "test-document-id"',
-      );
+      // Single failing block → no chunks, but no throw: the caller maps []
+      // to EMPTY_DOCUMENT instead of crashing the ingest.
+      const chunks = await createLlamaChunks({
+        pages: [{ pageNumber: 1, text: "test document" }],
+        documentId: "test-document-id",
+      });
+      expect(chunks).toEqual([]);
     } finally {
       spy.mockRestore();
     }
