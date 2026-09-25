@@ -71,6 +71,11 @@ model Document {
 
   status UploadStatus @default(PENDING_UPLOAD)
 
+  // Phase 2 re-ingest idempotency (Option B): SHA-256 of the normalized
+  // document text + chunker version. Re-ingest with a matching hash is a
+  // no-op; null means "never hashed" (pre-Phase-2) → re-ingest once.
+  contentHash String?
+
   failureReason DocumentFailureReason?
   errorMessage  String?                @db.Text
 
